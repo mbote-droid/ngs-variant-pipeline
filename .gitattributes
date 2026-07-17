@@ -1,0 +1,10 @@
+# Force LF line endings on all text files so scripts run correctly inside
+# Linux containers regardless of the OS the repo was cloned on.
+* text=auto eol=lf
+
+# Binary formats: never touch line endings
+*.png binary
+*.jpg binary
+*.gz  binary
+*.bam binary
+*.cram binary

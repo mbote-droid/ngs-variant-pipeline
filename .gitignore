@@ -1,0 +1,27 @@
+# Nextflow
+.nextflow/
+.nextflow.log*
+work/
+results/
+*.pot
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+env/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Large data (never commit real sequencing data)
+*.bam
+*.cram
+*.fastq
+*.fastq.gz
+*.fq.gz
+*.vcf.gz
+!assets/test_data/**
