@@ -1,39 +1,40 @@
 #!/usr/bin/env nextflow
 
 /*
- * Genome-to-Report Pipeline
- * =========================
- * Module 0 scaffold. This is a minimal, end-to-end smoke test that proves the
- * Nextflow + Docker toolchain works before any real genomics modules are added.
- * Real stages (QC -> alignment -> variant calling -> annotation -> report) are
- * added module by module per ROADMAP.md.
+ * ngs-variant-pipeline
+ * ====================
+ * Reproducible Nextflow NGS variant-analysis pipeline: raw sequencing reads to
+ * an AI-generated, evidence-cited clinical report. Built module by module
+ * (see ROADMAP.md). Germline short-read first, then somatic, then long-read.
+ *
+ * Current entry stage (M1): Input + QC
+ *   samplesheet -> validate -> FastQC + fastp -> MultiQC
  */
 
 nextflow.enable.dsl = 2
 
-process SMOKE_TEST {
-    tag 'smoke'
-    container 'ubuntu:22.04'
-    publishDir "${params.outdir}", mode: 'copy'
-
-    input:
-    val greeting
-
-    output:
-    path 'smoke_test.txt'
-
-    script:
-    """
-    {
-      echo "${greeting}"
-      echo "utc_time : \$(date -u)"
-      echo "host     : \$(uname -srm)"
-      echo "container: \$(grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '\\"')"
-    } > smoke_test.txt
-    cat smoke_test.txt
-    """
-}
+include { INPUT_CHECK } from './subworkflows/local/input_check'
+include { FASTQ_QC    } from './subworkflows/local/fastq_qc'
 
 workflow {
-    SMOKE_TEST( Channel.value(params.greeting) )
+    // Parameter checks
+    if (!params.input) {
+        error "No input samplesheet provided. Use --input <samplesheet.csv> " +
+              "(see assets/samplesheet_test.csv for the expected format)."
+    }
+
+    ch_versions = Channel.empty()
+
+    // Validate the samplesheet -> channel of [ meta, [fastqs] ]
+    INPUT_CHECK ( file(params.input, checkIfExists: true) )
+    ch_versions = ch_versions.mix( INPUT_CHECK.out.versions )
+
+    // Raw-read QC + trimming + aggregated report
+    FASTQ_QC ( INPUT_CHECK.out.reads )
+    ch_versions = ch_versions.mix( FASTQ_QC.out.versions )
+
+    // Collate tool versions for provenance
+    ch_versions
+        .unique()
+        .collectFile( name: 'software_versions.yml', storeDir: "${params.outdir}/pipeline_info" )
 }
