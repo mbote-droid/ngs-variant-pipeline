@@ -1,5 +1,7 @@
 # ngs-variant-pipeline
 
+[![CI](https://github.com/mbote-droid/ngs-variant-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/mbote-droid/ngs-variant-pipeline/actions/workflows/ci.yml)
+
 A reproducible, containerized clinical-genomics pipeline built with **Nextflow**:
 from raw sequencing reads to an evidence-cited, clinician-readable report. It runs
 identically on a laptop (small data) or on cloud/HPC (full data), and layers an AI
