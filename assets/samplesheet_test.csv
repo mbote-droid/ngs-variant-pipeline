@@ -1,2 +1,2 @@
 sample,fastq_1,fastq_2
-sample1,assets/test_data/sample1_R1.fastq,assets/test_data/sample1_R2.fastq
+sample1,assets/test_data/reads/sample1_R1.fastq,assets/test_data/reads/sample1_R2.fastq

@@ -40,8 +40,15 @@ jobs:
       - name: Confirm every stage published its outputs
         run: |
           set -e
-          test -f results/pipeline_info/samplesheet.valid.csv
-          test -f results/qc/fastqc/sample1_R1_fastqc.html
+          test -f results/pipeline_info/samplesheet.valid.csv          # M1 input
+          test -f results/qc/fastqc/sample1_R1_fastqc.html             # M1 QC
           test -f results/preprocessing/fastp/sample1/sample1_1.fastp.fastq.gz
-          test -f results/multiqc/multiqc_report.html
-          echo "All stages produced their expected outputs."
+          test -f results/alignment/sample1/sample1.recal.bam          # M2 align
+          test -f results/qc/alignment/sample1/sample1.flagstat        # M2 QC
+          test -f results/variants/sample1/sample1.filtered.vcf.gz     # M3 call
+          test -f results/annotation/sample1/sample1.snpeff.vcf.gz     # M4 annotate
+          test -f results/report/sample1/sample1.prioritized.json      # M5 prioritize
+          test -f results/report/sample1/sample1.report.html           # M6 report
+          test -f results/report/sample1/sample1.fhir.json
+          test -f results/multiqc/multiqc_report.html                  # aggregate
+          echo "All stages (M1-M6) produced their expected outputs."

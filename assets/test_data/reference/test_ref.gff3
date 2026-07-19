@@ -1,0 +1,5 @@
+##gff-version 3
+##sequence-region testchr 1 12000
+testchr	sim	gene	4000	4600	.	+	.	ID=gene_TESTG;Name=TESTG
+testchr	sim	mRNA	4000	4600	.	+	.	ID=tx_TESTG;Parent=gene_TESTG;Name=TESTG-201
+testchr	sim	CDS	4030	4570	.	+	0	ID=cds_TESTG;Parent=tx_TESTG

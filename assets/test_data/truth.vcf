@@ -1,0 +1,9 @@
+##fileformat=VCFv4.2
+##contig=<ID=testchr,length=12000>
+##INFO=<ID=AF,Number=A,Type=Float,Description="Allele frequency">
+##FILTER=<ID=PASS,Description="All filters passed">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	sample1
+testchr	4050	.	T	A	.	PASS	AF=0.5	GT	0/1
+testchr	4111	.	G	A	.	PASS	AF=1.0	GT	1/1
+testchr	4230	.	C	A	.	PASS	AF=0.5	GT	0/1
