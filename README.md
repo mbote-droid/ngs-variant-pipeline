@@ -7,8 +7,11 @@ from raw sequencing reads to an evidence-cited, clinician-readable report. It ru
 identically on a laptop (small data) or on cloud/HPC (full data), and layers an AI
 interpretation stage on top of standard best-practice genomics tooling.
 
-> Status: **Module 1 (Input + QC).** See `ROADMAP.md` for the build plan and
-> `ARCHITECTURE.md` for the full design. Research use only.
+> Status: **Complete germline pipeline (M1-M6):** reads -> QC -> align -> call ->
+> annotate -> prioritize -> report, with a single MultiQC over every stage. See
+> `ROADMAP.md` for the build plan, `ARCHITECTURE.md` for the design, and
+> [`docs/EXAMPLE_OUTPUT.md`](docs/EXAMPLE_OUTPUT.md) for a real-run snapshot.
+> Somatic mode, long-read, and the cloud profile are next. Research use only.
 
 ## Requirements
 - Nextflow (>= 24.04), Java 17-21
