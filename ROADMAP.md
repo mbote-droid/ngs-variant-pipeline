@@ -18,3 +18,31 @@ Reference genome: GRCh38. Germline caller: GATK HaplotypeCaller.
 
 Tool provisioning: `conda` is primary on this dev host; the `docker` profile is
 retained for portability.
+
+## Hardening track (production-readiness)
+
+The modules above are *built and tested on synthetic data*. This separate track
+turns "works on my laptop" into "runs a real genome and cites real evidence".
+These are depth/robustness items, distinct from the breadth items (M7, M9) above.
+
+- [ ] **H1  Containers** - pin and verify a container (mulled/biocontainers) for
+      every process, including the multi-tool steps that are currently conda-only
+      (e.g. `bwa-mem2 | samtools`); test the `docker`/`singularity` profiles.
+- [ ] **H2  Real reference + cache path** - wire and test real GRCh38 plus a
+      downloaded VEP/SnpEff cache (the current offline SnpEff DB is synthetic-only);
+      a `--download_cache`/igenomes-style reference handling.
+- [ ] **H3  Clinical + population evidence** - annotate against ClinVar, gnomAD,
+      dbSNP (and COSMIC for somatic) so prioritization is evidence-cited, not just
+      functional-impact; formal ACMG-style criteria.
+- [ ] **H4  Accuracy benchmarking** - validate calls against a gold standard
+      (GIAB HG001/HG002 + high-confidence regions) with hap.py/vcfeval; publish
+      precision / recall / F1 per variant type. (See ACCURACY.md.)
+- [ ] **H5  Multi-sample scale** - lane merging (cat_fastq), cohort joint
+      genotyping, per-sample and per-cohort reporting.
+- [ ] **H6  Real AI interpretation** - wire an actual LLM (offline/served) into the
+      report's narrative hook, with strict JSON guardrails and graceful fallback.
+- [ ] **H7  Full FHIR conformance** - align the Bundle with the HL7 Genomics
+      Reporting IG.
+
+Intentional scope (not defects): outputs are **research-use-only** and are not a
+clinical/ACMG diagnostic. That labelling stays until real clinical validation.
