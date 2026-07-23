@@ -33,15 +33,24 @@ These are depth/robustness items, distinct from the breadth items (M7, M9) above
       host. See `docs/CONTAINERS.md`. (Registry pull-verification must be run on a
       container-capable host - CI here and the dev environment have no engine and
       block the registries.)
-- [ ] **H2  Real reference + cache path** - wire and test real GRCh38 plus a
-      downloaded VEP/SnpEff cache (the current offline SnpEff DB is synthetic-only);
-      a `--download_cache`/igenomes-style reference handling.
-- [ ] **H3  Clinical + population evidence** - annotate against ClinVar, gnomAD,
-      dbSNP (and COSMIC for somatic) so prioritization is evidence-cited, not just
-      functional-impact; formal ACMG-style criteria.
-- [ ] **H4  Accuracy benchmarking** - validate calls against a gold standard
-      (GIAB HG001/HG002 + high-confidence regions) with hap.py/vcfeval; publish
-      precision / recall / F1 per variant type. (See ACCURACY.md.)
+- [x] **H2  Real reference + cache path** - `--genome GRCh38` resolves reference
+      assets from an igenomes-style map (`conf/genomes.config`); annotation cache
+      is provisioned three ways - offline SnpEff build (default), downloaded SnpEff
+      cache (`--download_snpeff_cache`), or Ensembl VEP (`--annotator vep`, local or
+      downloaded cache). prioritize reads SnpEff ANN or VEP CSQ. See
+      docs/REFERENCES.md. (Real-genome + cache download run on a Docker/WSL host;
+      the default offline synthetic path is unchanged and CI-covered.)
+- [x] **H3  Clinical + population evidence** - optional ClinVar / gnomAD / dbSNP
+      overlay (`--clinvar/--gnomad/--dbsnp`, bcftools) feeding evidence-aware
+      tiering plus a transparent **ACMG-style** classification over a subset of the
+      2015 criteria (unit-tested in `tests/test_acmg.py`). Research-use labelled;
+      not a clinical determination. COSMIC/somatic deferred to M7. See
+      docs/EVIDENCE.md.
+- [x] **H4  Accuracy benchmarking** - `--benchmark` scores calls vs a truth set
+      with two interchangeable backends: a stdlib exact-match concordance (offline,
+      unit-tested) and GA4GH **hap.py** for real gold standards (GIAB HG001/HG002 +
+      confident BED); precision / recall / F1 per variant type. vcfeval slots in via
+      the same parse->metrics pattern. See ACCURACY.md.
 - [ ] **H5  Multi-sample scale** - lane merging (cat_fastq), cohort joint
       genotyping, per-sample and per-cohort reporting.
 - [ ] **H6  Real AI interpretation** - wire an actual LLM (offline/served) into the

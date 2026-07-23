@@ -86,6 +86,16 @@ def maybe_llm_narrative(summary: dict, enable_llm: bool) -> str:
     return templated
 
 
+def _fmt_af(af) -> str:
+    """Render a gnomAD AF compactly, or '' when absent."""
+    if af in (None, ""):
+        return ""
+    try:
+        return f"{float(af):.3g}"
+    except (TypeError, ValueError):
+        return html.escape(str(af))
+
+
 def _row_html(v: dict) -> str:
     cells = [
         v.get("tier", ""),
@@ -97,6 +107,10 @@ def _row_html(v: dict) -> str:
         html.escape(str(v.get("hgvs_p", ""))),
         html.escape(str(v.get("genotype", ""))),
         html.escape(str(v.get("filter", ""))),
+        html.escape(str(v.get("acmg_classification", ""))),
+        html.escape(str(v.get("clinvar_sig", ""))),
+        _fmt_af(v.get("gnomad_af")),
+        html.escape(str(v.get("rsid", ""))),
     ]
     return "<tr>" + "".join(f"<td>{c}</td>" for c in cells) + "</tr>"
 
@@ -106,11 +120,15 @@ def render_html(summary: dict, narrative: str) -> str:
     counts = summary.get("tier_counts", {})
     rows = "\n".join(_row_html(v) for v in summary.get("variants", []))
     if not rows:
-        rows = ('<tr><td colspan="9" style="text-align:center">'
+        rows = ('<tr><td colspan="13" style="text-align:center">'
                 'No variants reported.</td></tr>')
     tier_summary = " &nbsp;|&nbsp; ".join(
         f"Tier {t}: {int(counts.get(str(t), 0))}" for t in (1, 2, 3, 4)
     )
+    acmg_counts = summary.get("acmg_counts", {})
+    acmg_summary = (" &nbsp;|&nbsp; ".join(
+        f"{html.escape(str(k))}: {int(n)}" for k, n in acmg_counts.items()
+    ) if acmg_counts else "")
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -137,11 +155,13 @@ def render_html(summary: dict, narrative: str) -> str:
   <div class="summary">
     <p><strong>Summary.</strong> {html.escape(narrative)}</p>
     <p>{tier_summary}</p>
+    {f'<p><strong>ACMG-style class (research-use):</strong> {acmg_summary}</p>' if acmg_summary else ''}
   </div>
   <table>
     <thead>
       <tr><th>Tier</th><th>Gene</th><th>Locus</th><th>Change</th><th>Impact</th>
-      <th>Effect</th><th>HGVS.p</th><th>Genotype</th><th>Filter</th></tr>
+      <th>Effect</th><th>HGVS.p</th><th>Genotype</th><th>Filter</th>
+      <th>ACMG-style</th><th>ClinVar</th><th>gnomAD AF</th><th>dbSNP</th></tr>
     </thead>
     <tbody>
       {rows}
@@ -181,7 +201,9 @@ def build_fhir(summary: dict) -> dict:
                                 f"{v.get('pos', '')} {v.get('ref', '')}>"
                                 f"{v.get('alt', '')} "
                                 f"[{v.get('impact', '')}/{v.get('effect', '')}] "
-                                f"tier {v.get('tier', '')}"),
+                                f"tier {v.get('tier', '')}"
+                                + (f" ACMG-style: {v['acmg_classification']}"
+                                   if v.get('acmg_classification') else "")),
             }
         })
 
@@ -213,6 +235,7 @@ def write_reports(summary: dict, narrative: str, prefix: Path) -> None:
         "sample": summary.get("sample"),
         "narrative": narrative,
         "tier_counts": summary.get("tier_counts", {}),
+        "acmg_counts": summary.get("acmg_counts", {}),
         "total_variants": summary.get("total_variants", len(summary.get("variants", []))),
         "variants": summary.get("variants", []),
         "disclaimer": DISCLAIMER,
