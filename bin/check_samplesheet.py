@@ -13,13 +13,15 @@ Input columns
                         (e.g. one FASTQ pair per sequencing lane).
   fastq_1   (required)  Path/URI to R1 reads (.fastq[.gz] or .fq[.gz]).
   fastq_2   (optional)  Path/URI to R2 reads. Empty => single-end.
-  status    (optional)  0 = normal/germline (default), 1 = tumor. Reserved for
-                        the somatic mode added in a later module; validated now
-                        so germline samplesheets stay forward-compatible.
+  status    (optional)  0 = normal/germline (default), 1 = tumor. Drives somatic
+                        tumor/normal calling (M7).
+  patient   (optional)  Pairing id that groups a tumor with its matched normal
+                        for somatic calling. Defaults to `sample` when absent, so
+                        germline samplesheets need not set it.
 
 Output columns (normalized)
 ---------------------------
-  sample,single_end,fastq_1,fastq_2,status
+  sample,patient,single_end,fastq_1,fastq_2,status
 
 Rules enforced
 --------------
@@ -51,9 +53,9 @@ logging.basicConfig(
 log = logging.getLogger("check_samplesheet")
 
 REQUIRED_COLUMNS = ("sample", "fastq_1")
-OPTIONAL_COLUMNS = ("fastq_2", "status")
+OPTIONAL_COLUMNS = ("fastq_2", "status", "patient")
 FASTQ_SUFFIXES = (".fastq.gz", ".fq.gz", ".fastq", ".fq")
-OUTPUT_HEADER = ("sample", "single_end", "fastq_1", "fastq_2", "status")
+OUTPUT_HEADER = ("sample", "patient", "single_end", "fastq_1", "fastq_2", "status")
 
 
 class SamplesheetError(Exception):
@@ -158,6 +160,12 @@ def _validate_row(
             f"'status' must be 0 or 1, got {status!r}", line=line
         )
 
+    patient = record.get("patient", "") or sample   # defaults to the sample id
+    if any(ch.isspace() for ch in patient):
+        raise SamplesheetError(
+            f"'patient' contains whitespace: {patient!r}", line=line
+        )
+
     if check_exists:
         for field, value in (("fastq_1", fastq_1), ("fastq_2", fastq_2)):
             if value and not Path(value).is_file():
@@ -168,6 +176,7 @@ def _validate_row(
     single_end = fastq_2 == ""
     return {
         "sample": sample,
+        "patient": patient,
         "single_end": "true" if single_end else "false",
         "fastq_1": fastq_1,
         "fastq_2": fastq_2,

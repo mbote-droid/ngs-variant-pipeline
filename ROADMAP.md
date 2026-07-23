@@ -11,7 +11,11 @@ Reference genome: GRCh38. Germline caller: GATK HaplotypeCaller.
 - [x] **M4  Annotation** - SnpEff with a database built offline from the reference + GFF3 (no multi-GB cache download); CSV stats to MultiQC. (VEP is the intended cloud/full-scale alternative.)
 - [x] **M5  Prioritization** - impact/ACMG-style tiering (stdlib Python + pytest); research-use labelled.
 - [x] **M6  Report layer** - deterministic HTML + JSON + minimal FHIR R4 report (stdlib Python + pytest); works fully offline, optional LLM narrative enrichment. ← a complete germline reads-to-report pipeline
-- [ ] **M7  Somatic mode** - Mutect2 tumor/normal + panel of normals + COSMIC/actionability
+- [x] **M7  Somatic mode** - GATK4 Mutect2 tumor/normal (paired via samplesheet
+      `patient`/`status`), read-orientation model + FilterMutectCalls, optional
+      panel-of-normals & germline-resource; opt-in `--somatic`, germline path
+      unchanged. See `docs/SOMATIC.md`. (Contamination table + COSMIC/actionability
+      remain follow-ups.)
 - [ ] **M8  Integration + cloud profile** - demonstrate "same pipeline, any scale"
 - [ ] **M9  Long-read add-on** - minimap2, Clair3, Sniffles2 structural variants
 - [ ] **M10 Polish** - nf-core lint, provenance, README, demo data, portfolio writeup

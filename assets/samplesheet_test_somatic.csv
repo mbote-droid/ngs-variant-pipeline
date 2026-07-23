@@ -1,0 +1,3 @@
+sample,fastq_1,fastq_2,status,patient
+normal1,assets/test_data/reads/sample1_R1.fastq,assets/test_data/reads/sample1_R2.fastq,0,patientA
+tumor1,assets/test_data/reads/sample1_R1.fastq,assets/test_data/reads/sample1_R2.fastq,1,patientA

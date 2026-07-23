@@ -29,6 +29,7 @@ def create_fastq_channel(LinkedHashMap row) {
     meta.id         = row.sample
     meta.single_end = row.single_end.toBoolean()
     meta.status     = (row.status ?: '0').toInteger()
+    meta.patient    = row.patient ?: row.sample     // pairing id for somatic (M7)
 
     if (meta.single_end) {
         return [ meta, [ file(row.fastq_1, checkIfExists: true) ] ]

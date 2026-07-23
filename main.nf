@@ -18,6 +18,7 @@ include { FASTQ_QC       } from './subworkflows/local/fastq_qc'
 include { PREPARE_GENOME } from './subworkflows/local/prepare_genome'
 include { ALIGN          } from './subworkflows/local/align'
 include { CALL_VARIANTS  } from './subworkflows/local/call_variants'
+include { CALL_VARIANTS_SOMATIC } from './subworkflows/local/call_variants_somatic'
 include { ANNOTATE       } from './subworkflows/local/annotate'
 include { BENCHMARK      } from './subworkflows/local/benchmark'
 include { REPORT         } from './subworkflows/local/report'
@@ -82,33 +83,53 @@ workflow {
         .mix( ALIGN.out.markdup_metrics.map { meta, f -> f } )
         .mix( ALIGN.out.mosdepth_global.map { meta, f -> f } )
 
-    // ---- M3: germline variant calling -----------------------------------
-    CALL_VARIANTS (
-        ALIGN.out.bam,
-        PREPARE_GENOME.out.fasta,
-        PREPARE_GENOME.out.fai,
-        PREPARE_GENOME.out.dict
-    )
-    ch_versions      = ch_versions.mix( CALL_VARIANTS.out.versions )
-    ch_multiqc_files = ch_multiqc_files.mix( CALL_VARIANTS.out.stats.map { meta, f -> f } )
+    // ---- M3 / M7: variant calling (germline, or somatic tumor/normal) ---
+    if ( params.somatic ) {
+        // Somatic: pair tumor/normal by patient and run Mutect2 (opt-in).
+        ch_pon      = params.pon ? Channel.fromPath(params.pon, checkIfExists: true).first() : Channel.value([])
+        ch_pon_tbi  = params.pon ? Channel.fromPath("${params.pon}.tbi", checkIfExists: true).first() : Channel.value([])
+        ch_germ     = params.germline_resource ? Channel.fromPath(params.germline_resource, checkIfExists: true).first() : Channel.value([])
+        ch_germ_tbi = params.germline_resource ? Channel.fromPath("${params.germline_resource}.tbi", checkIfExists: true).first() : Channel.value([])
 
-    // ---- H4: accuracy benchmarking (opt-in) -----------------------------
-    if ( params.benchmark ) {
-        if ( !params.truth ) {
-            error "Benchmarking (--benchmark) requires --truth <truth.vcf> " +
-                  "(and optionally --truth_bed <regions.bed>)."
-        }
-        BENCHMARK (
-            CALL_VARIANTS.out.vcf,
+        CALL_VARIANTS_SOMATIC (
+            ALIGN.out.bam,
             PREPARE_GENOME.out.fasta,
-            PREPARE_GENOME.out.fai
+            PREPARE_GENOME.out.fai,
+            PREPARE_GENOME.out.dict,
+            ch_pon, ch_pon_tbi, ch_germ, ch_germ_tbi
         )
-        ch_versions      = ch_versions.mix( BENCHMARK.out.versions )
-        ch_multiqc_files = ch_multiqc_files.mix( BENCHMARK.out.tsv.map { meta, f -> f } )
+        ch_versions  = ch_versions.mix( CALL_VARIANTS_SOMATIC.out.versions )
+        ch_calls_vcf = CALL_VARIANTS_SOMATIC.out.vcf
+    }
+    else {
+        CALL_VARIANTS (
+            ALIGN.out.bam,
+            PREPARE_GENOME.out.fasta,
+            PREPARE_GENOME.out.fai,
+            PREPARE_GENOME.out.dict
+        )
+        ch_versions      = ch_versions.mix( CALL_VARIANTS.out.versions )
+        ch_multiqc_files = ch_multiqc_files.mix( CALL_VARIANTS.out.stats.map { meta, f -> f } )
+        ch_calls_vcf     = CALL_VARIANTS.out.vcf
+
+        // ---- H4: accuracy benchmarking (opt-in, germline) ---------------
+        if ( params.benchmark ) {
+            if ( !params.truth ) {
+                error "Benchmarking (--benchmark) requires --truth <truth.vcf> " +
+                      "(and optionally --truth_bed <regions.bed>)."
+            }
+            BENCHMARK (
+                ch_calls_vcf,
+                PREPARE_GENOME.out.fasta,
+                PREPARE_GENOME.out.fai
+            )
+            ch_versions      = ch_versions.mix( BENCHMARK.out.versions )
+            ch_multiqc_files = ch_multiqc_files.mix( BENCHMARK.out.tsv.map { meta, f -> f } )
+        }
     }
 
     // ---- M4: annotation -------------------------------------------------
-    ch_report_vcf = CALL_VARIANTS.out.vcf
+    ch_report_vcf = ch_calls_vcf
     if ( !params.skip_annotation ) {
         // The offline SnpEff DB build needs a GFF3; a downloaded/prebuilt cache
         // or the VEP path does not.
@@ -120,7 +141,7 @@ workflow {
                   "run with --skip_annotation."
         }
         ANNOTATE (
-            CALL_VARIANTS.out.vcf,
+            ch_calls_vcf,
             PREPARE_GENOME.out.fasta,
             params.gff ? Channel.fromPath(params.gff, checkIfExists: true)
                        : Channel.value([]),
