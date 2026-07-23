@@ -105,3 +105,41 @@ def test_no_unresolved_format_placeholders():
     for fn in (pa.pr_curve_svg, pa.f1_by_type_svg, pa.genotype_confusion_svg):
         svg = fn(_RESULT)
         assert "{" not in svg and "}" not in svg
+
+
+# --- classifier eval charts (ROC / PR-AUC) ---------------------------------
+
+_EVAL = {
+    "sample": "demo", "score_field": "impact", "self_consistent": False,
+    "roc_auc": 0.84, "pr_auc": 0.87, "prevalence": 0.45, "kind": "classifier",
+    "roc_curve": [{"fpr": 0.0, "tpr": 0.0, "threshold": None},
+                  {"fpr": 0.1, "tpr": 0.6, "threshold": 3.0},
+                  {"fpr": 0.4, "tpr": 0.9, "threshold": 2.0},
+                  {"fpr": 1.0, "tpr": 1.0, "threshold": None}],
+    "pr_curve": [{"recall": 0.6, "precision": 0.9, "threshold": 3.0},
+                 {"recall": 0.9, "precision": 0.75, "threshold": 2.0}],
+}
+
+
+def test_roc_svg():
+    svg = pa.roc_svg(_EVAL)
+    _wellformed(svg)
+    assert "ROC" in svg and "AUC 0.84" in svg
+    assert "<polyline" in svg
+    assert "stroke-dasharray" in svg     # chance diagonal
+
+
+def test_pr_auc_svg_has_prevalence_baseline():
+    svg = pa.pr_auc_svg(_EVAL)
+    _wellformed(svg)
+    assert "AP 0.87" in svg
+    assert "stroke-dasharray" in svg     # prevalence no-skill line
+
+
+def test_write_plots_routes_by_kind(tmp_path):
+    written = pa.write_plots(_EVAL, tmp_path, "s1")
+    names = {p.name for p in written}
+    assert names == {"s1.roc.svg", "s1.pr_auc.svg"}      # classifier set, not benchmark
+    written2 = pa.write_plots(_RESULT, tmp_path, "b1")
+    assert {p.name for p in written2} == {
+        "b1.pr_curve.svg", "b1.f1_by_type.svg", "b1.genotype_confusion.svg"}

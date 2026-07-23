@@ -212,17 +212,66 @@ def genotype_confusion_svg(result: dict) -> str:
     return "\n".join(s)
 
 
-PLOTS = {
+def roc_svg(result: dict) -> str:
+    """ROC curve for the classifier eval (eval_prioritizer.py JSON)."""
+    pts = result.get("roc_curve", [])
+    x0, x1, y0, y1 = PAD_L, W - PAD_R, PAD_T, H - PAD_B
+    auc = result.get("roc_auc")
+    note = " · self-consistent (uses ClinVar)" if result.get("self_consistent") else ""
+    s = _card("ROC — prioritizer vs ClinVar",
+              f"{result.get('sample', '')} · score={result.get('score_field', '')} · "
+              f"AUC {auc if auc is not None else 'n/a'}{note}")
+    s += _axes01(x0, x1, y0, y1, "False positive rate", "True positive rate")
+    # chance diagonal
+    s.append(f'<line x1="{x0}" y1="{y1}" x2="{x1}" y2="{y0}" stroke="{MUTED}" '
+             f'stroke-width="1" stroke-dasharray="4 4"/>')
+    if len(pts) >= 2:
+        d = " ".join(f"{_px(p['fpr'], x0, x1):.1f},{_py(p['tpr'], y0, y1):.1f}" for p in pts)
+        s.append(f'<polyline points="{d}" fill="none" stroke="{C_BLUE}" '
+                 f'stroke-width="2" stroke-linejoin="round"/>')
+    s.append("</svg>")
+    return "\n".join(s)
+
+
+def pr_auc_svg(result: dict) -> str:
+    """Precision-recall curve for the classifier eval (with prevalence baseline)."""
+    pts = result.get("pr_curve", [])
+    x0, x1, y0, y1 = PAD_L, W - PAD_R, PAD_T, H - PAD_B
+    ap = result.get("pr_auc")
+    prev = result.get("prevalence")
+    s = _card("Precision–Recall — prioritizer vs ClinVar",
+              f"{result.get('sample', '')} · score={result.get('score_field', '')} · "
+              f"AP {ap if ap is not None else 'n/a'}")
+    s += _axes01(x0, x1, y0, y1, "Recall", "Precision")
+    if prev is not None:                       # no-skill baseline = prevalence
+        by = _py(float(prev), y0, y1)
+        s.append(f'<line x1="{x0}" y1="{by:.1f}" x2="{x1}" y2="{by:.1f}" stroke="{MUTED}" '
+                 f'stroke-width="1" stroke-dasharray="4 4"/>')
+    if len(pts) >= 2:
+        d = " ".join(f"{_px(p['recall'], x0, x1):.1f},{_py(p['precision'], y0, y1):.1f}"
+                     for p in pts)
+        s.append(f'<polyline points="{d}" fill="none" stroke="{C_ORANGE}" '
+                 f'stroke-width="2" stroke-linejoin="round"/>')
+    s.append("</svg>")
+    return "\n".join(s)
+
+
+BENCHMARK_PLOTS = {
     "pr_curve": pr_curve_svg,
     "f1_by_type": f1_by_type_svg,
     "genotype_confusion": genotype_confusion_svg,
+}
+CLASSIFIER_PLOTS = {
+    "roc": roc_svg,
+    "pr_auc": pr_auc_svg,
 }
 
 
 def write_plots(result: dict, outdir: Path, prefix: str) -> list[Path]:
     outdir.mkdir(parents=True, exist_ok=True)
+    plots = CLASSIFIER_PLOTS if result.get("kind") == "classifier" else BENCHMARK_PLOTS
     written = []
-    for name, fn in PLOTS.items():
+    for name, fn in plots.items():
         out = outdir / f"{prefix}.{name}.svg"
         out.write_text(fn(result), encoding="utf-8")
         written.append(out)
