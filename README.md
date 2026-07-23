@@ -51,6 +51,12 @@ Outputs land under `results/`: `qc/fastqc/`, `preprocessing/fastp/`,
 per sample). See **[COHORT.md](docs/COHORT.md)**. Tumor/normal somatic calling is
 **[SOMATIC.md](docs/SOMATIC.md)** (`--somatic`).
 
+**Interoperable output:** each report includes an HL7 Genomics Reporting
+IG-aligned **FHIR R4** bundle (`<sample>.fhir.json`) — Patient + Specimen +
+genomic-report DiagnosticReport + LOINC-coded variant Observations — with an
+offline structural validator (`bin/validate_fhir.py`, run in CI). See
+**[FHIR.md](docs/FHIR.md)**.
+
 ## Accuracy
 Calls are scored against a truth set (precision / recall / F1, split by SNP/INDEL,
 plus genotype concordance) via `--benchmark` — a stdlib exact-match backend or

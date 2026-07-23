@@ -68,8 +68,18 @@ These are depth/robustness items, distinct from the breadth items (M7, M9) above
       a gene-grounding anti-hallucination check) and graceful fallback to the
       deterministic template. Off by default; de-identified digest only; unit-tested
       offline with an injected fake client. See `docs/AI_REPORT.md`.
-- [ ] **H7  Full FHIR conformance** - align the Bundle with the HL7 Genomics
-      Reporting IG.
+- [x] **H7  Full FHIR conformance** - the report Bundle is aligned to the HL7
+      Genomics Reporting IG: a de-identified Patient + Specimen + genomic-report
+      DiagnosticReport + one profiled `variant` Observation per variant, each
+      carrying the IG's LOINC-coded components (gene studied, DNA/AA change,
+      reference assembly, ref/alt allele, allelic state, genomic source class,
+      molecular consequence [Sequence Ontology], clinical significance). Entries
+      use stable urn:uuid fullUrls so references resolve inside the bundle and
+      output is reproducible. `bin/validate_fhir.py` is an offline structural
+      conformance gate (mandatory elements, component values, reference
+      resolution) run in CI; authoritative IG profile validation on a FHIR host
+      is documented. Assembly + germline/somatic source class are set per run.
+      See `docs/FHIR.md`.
 
 Intentional scope (not defects): outputs are **research-use-only** and are not a
 clinical/ACMG diagnostic. That labelling stays until real clinical validation.

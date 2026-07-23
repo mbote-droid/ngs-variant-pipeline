@@ -5,7 +5,8 @@ Generate a clinician-readable report from prioritized variants.
 Consumes the JSON produced by prioritize_variants.py and emits:
   <prefix>.report.html   a self-contained (no external assets) HTML report
   <prefix>.report.json   the structured report payload
-  <prefix>.fhir.json     a minimal FHIR R4 Bundle (DiagnosticReport + Observations)
+  <prefix>.fhir.json     an HL7 Genomics Reporting IG-aligned FHIR R4 Bundle
+                         (Patient + Specimen + DiagnosticReport + Observations)
 
 Design principles (per project rules):
   * Works fully offline with NO LLM - a deterministic, templated narrative is
@@ -192,61 +193,353 @@ def render_html(summary: dict, narrative: str) -> str:
 """
 
 
-def build_fhir(summary: dict) -> dict:
-    """A minimal, structurally-valid FHIR R4 Bundle. Research-use labelled.
+# --- FHIR: HL7 Genomics Reporting IG-aligned Bundle (H7) --------------------
+#
+# The bundle targets the HL7 FHIR Genomics Reporting Implementation Guide
+# (http://hl7.org/fhir/uv/genomics-reporting). A "genomic-report"
+# DiagnosticReport references one "variant" Observation per variant, each
+# carrying the IG's LOINC-coded components (gene studied, DNA/AA change,
+# reference assembly, ref/alt allele, allelic state, clinical significance,
+# molecular consequence, coordinates). A Patient (de-identified) and a Specimen
+# complete the subject/provenance chain. Entries are addressed by stable
+# urn:uuid fullUrls so the whole graph is self-contained and references resolve
+# inside the bundle. Fully offline, deterministic, research-use labelled.
 
-    One DiagnosticReport plus one Observation per variant. This is a lightweight
-    representation, not a full Genomics-Reporting IG conformant document.
+_GR_IG = "http://hl7.org/fhir/uv/genomics-reporting/StructureDefinition"
+_LOINC = "http://loinc.org"
+_SO = "http://www.sequenceontology.org"
+_TBD = "http://hl7.org/fhir/uv/genomics-reporting/CodeSystem/tbd-codes"
+
+# LOINC "Human reference sequence assembly version" answer list (62374-4).
+_ASSEMBLY_LOINC = {
+    "grch38": ("LA26806-2", "GRCh38"),
+    "hg38": ("LA26806-2", "GRCh38"),
+    "grch37": ("LA14029-5", "GRCh37"),
+    "hg19": ("LA14029-5", "GRCh37"),
+    "ncbi36": ("LA14030-3", "NCBI36/hg18"),
+    "hg18": ("LA14030-3", "NCBI36/hg18"),
+}
+
+# LOINC "Genetic variant clinical significance" answer list (53037-8). Ordered
+# most-specific first so "likely pathogenic" matches before the "pathogenic"
+# substring (and likewise for benign).
+_CLINSIG_LOINC = [
+    ("likely pathogenic", "LA26332-9", "Likely pathogenic"),
+    ("likely benign", "LA26334-5", "Likely benign"),
+    ("uncertain significance", "LA26333-7", "Uncertain significance"),
+    ("pathogenic", "LA6668-3", "Pathogenic"),
+    ("benign", "LA6675-8", "Benign"),
+]
+
+# LOINC "Allelic state" answer list (53034-5).
+_ALLELIC_STATE = {
+    "het": ("LA6706-1", "Heterozygous"),
+    "hom_alt": ("LA6705-3", "Homozygous"),
+    "hom_ref": ("LA6704-6", "Homoplasmic"),  # best-effort; hom-ref rarely reported
+}
+
+# Sequence Ontology accessions for common SnpEff/VEP effects (molecular
+# consequence, LOINC 48006-1 slot). Unknown effects fall back to text only.
+_SO_TERMS = {
+    "missense_variant": "SO:0001583",
+    "stop_gained": "SO:0001587",
+    "stop_lost": "SO:0001578",
+    "start_lost": "SO:0002012",
+    "frameshift_variant": "SO:0001589",
+    "synonymous_variant": "SO:0001819",
+    "splice_acceptor_variant": "SO:0001574",
+    "splice_donor_variant": "SO:0001575",
+    "splice_region_variant": "SO:0001630",
+    "intron_variant": "SO:0001627",
+    "5_prime_UTR_variant": "SO:0001623",
+    "3_prime_UTR_variant": "SO:0001624",
+    "inframe_deletion": "SO:0001822",
+    "inframe_insertion": "SO:0001821",
+    "protein_altering_variant": "SO:0001818",
+    "coding_sequence_variant": "SO:0001580",
+}
+
+_FHIR_NS = __import__("uuid").uuid5(
+    __import__("uuid").NAMESPACE_URL, "urn:ngs-variant-pipeline:fhir")
+
+
+def _urn(sample: str, kind: str, key: str = "") -> str:
+    """A stable urn:uuid for a resource (deterministic -> reproducible output)."""
+    import uuid
+    return "urn:uuid:" + str(uuid.uuid5(_FHIR_NS, f"{sample}/{kind}/{key}"))
+
+
+def _cc(system: str, code: str, display: str, text: str = "") -> dict:
+    """A CodeableConcept with a single coding (and optional text)."""
+    cc = {"coding": [{"system": system, "code": code, "display": display}]}
+    if text:
+        cc["text"] = text
+    return cc
+
+
+def _assembly_cc(assembly: str) -> dict:
+    code, display = _ASSEMBLY_LOINC.get(
+        (assembly or "").lower().strip(), ("LA26806-2", "GRCh38"))
+    return _cc(_LOINC, code, display)
+
+
+def _clinsig_cc(variant: dict) -> dict | None:
+    """Map ClinVar significance (preferred) or the ACMG-style class to a LOINC
+    clinical-significance CodeableConcept. Returns None when neither is set."""
+    raw = (variant.get("clinvar_sig") or variant.get("acmg_classification") or "")
+    low = raw.lower()
+    for needle, code, display in _CLINSIG_LOINC:
+        if needle in low:
+            return _cc(_LOINC, code, display, text=raw)
+    return None
+
+
+def _component(loinc: str, display: str, value: dict) -> dict:
+    """One Observation.component with a LOINC code and a value.* payload."""
+    comp = {"code": {"coding": [{"system": _LOINC, "code": loinc,
+                                  "display": display}]}}
+    comp.update(value)
+    return comp
+
+
+def _variant_components(v: dict, assembly: str, source_class: str) -> list[dict]:
+    comps: list[dict] = []
+
+    if v.get("gene"):
+        comps.append(_component(
+            "48018-6", "Gene studied [ID]",
+            {"valueCodeableConcept": {
+                "coding": [{"system": "http://www.genenames.org",
+                            "display": str(v["gene"])}],
+                "text": str(v["gene"])}}))
+
+    # Reference assembly + genomic reference sequence (chromosome).
+    comps.append(_component(
+        "62374-4", "Human reference sequence assembly version",
+        {"valueCodeableConcept": _assembly_cc(assembly)}))
+    if v.get("chrom"):
+        comps.append(_component(
+            "48013-7", "Genomic reference sequence [ID]",
+            {"valueCodeableConcept": {"text": str(v["chrom"])}}))
+
+    # Genomic coordinate (1-based start) as an IG exact-start-end range.
+    if v.get("pos") not in (None, ""):
+        comps.append({
+            "code": {"coding": [{"system": _TBD, "code": "exact-start-end",
+                                 "display": "Exact start-end"}]},
+            "valueRange": {"low": {"value": int(v["pos"])}}})
+
+    # Ref / alt alleles.
+    if v.get("ref"):
+        comps.append(_component("69547-8", "Genomic ref allele [ID]",
+                                {"valueString": str(v["ref"])}))
+    if v.get("alt"):
+        comps.append(_component("69551-0", "Genomic alt allele [ID]",
+                                {"valueString": str(v["alt"])}))
+
+    # DNA / amino-acid change (HGVS).
+    if v.get("hgvs_c"):
+        comps.append(_component("48004-6", "DNA change (c.HGVS)",
+                                {"valueCodeableConcept": {"text": str(v["hgvs_c"])}}))
+    if v.get("hgvs_p"):
+        comps.append(_component("48005-3", "Amino acid change (p.HGVS)",
+                                {"valueCodeableConcept": {"text": str(v["hgvs_p"])}}))
+
+    # Allelic state (zygosity).
+    state = _ALLELIC_STATE.get(str(v.get("genotype", "")))
+    if state:
+        comps.append(_component("53034-5", "Allelic state",
+                                {"valueCodeableConcept": _cc(_LOINC, state[0], state[1])}))
+
+    # Genomic source class (germline vs somatic).
+    src = ("LA6684-0", "Somatic") if source_class == "somatic" else ("LA6683-2", "Germline")
+    comps.append(_component("48002-0", "Genomic source class",
+                            {"valueCodeableConcept": _cc(_LOINC, src[0], src[1])}))
+
+    # Molecular consequence (Sequence Ontology).
+    effect = str(v.get("effect", "")).split("&")[0].strip()
+    if effect:
+        so = _SO_TERMS.get(effect)
+        conc = {"text": effect}
+        if so:
+            conc["coding"] = [{"system": _SO, "code": so, "display": effect}]
+        comps.append(_component("48006-1", "Molecular consequence",
+                                {"valueCodeableConcept": conc}))
+
+    # Clinical significance (ClinVar / ACMG-style).
+    clinsig = _clinsig_cc(v)
+    if clinsig:
+        comps.append(_component("53037-8", "Genetic variant clinical significance",
+                                {"valueCodeableConcept": clinsig}))
+
+    return comps
+
+
+def build_fhir(summary: dict, assembly: str = "GRCh38",
+               source_class: str = "germline") -> dict:
+    """An HL7 Genomics Reporting IG-aligned FHIR R4 collection Bundle.
+
+    Patient (de-identified) + Specimen + genomic-report DiagnosticReport + one
+    variant Observation per variant (with the IG's LOINC-coded components).
+    Entries are self-contained (stable urn:uuid fullUrls; references resolve
+    inside the bundle). Research-use labelled; not a validated diagnostic device.
     """
     sample = str(summary.get("sample", "sample"))
+    patient_url = _urn(sample, "Patient")
+    specimen_url = _urn(sample, "Specimen")
+    report_url = _urn(sample, "DiagnosticReport")
+
     entries: list[dict] = []
+
+    # De-identified subject: a research sample id only, no PII.
+    entries.append({"fullUrl": patient_url, "resource": {
+        "resourceType": "Patient",
+        "id": _id_from(patient_url),
+        "identifier": [{"system": "urn:ngs-variant-pipeline:sample", "value": sample}],
+    }})
+    entries.append({"fullUrl": specimen_url, "resource": {
+        "resourceType": "Specimen",
+        "id": _id_from(specimen_url),
+        "subject": {"reference": patient_url},
+        "type": _cc("http://terminology.hl7.org/CodeSystem/v2-0487",
+                    "DNA", "Deoxyribonucleic acid"),
+    }})
 
     obs_refs = []
     for i, v in enumerate(summary.get("variants", []), start=1):
-        obs_id = f"variant-{i}"
-        obs_refs.append({"reference": f"Observation/{obs_id}"})
-        entries.append({
-            "resource": {
-                "resourceType": "Observation",
-                "id": obs_id,
-                "status": "final",
-                "category": [{"coding": [{
-                    "system": "http://terminology.hl7.org/CodeSystem/observation-category",
-                    "code": "laboratory"}]}],
-                "code": {"coding": [{
-                    "system": "http://loinc.org", "code": "69548-6",
-                    "display": "Genetic variant assessment"}]},
-                "valueString": (f"{v.get('gene', '')} {v.get('chrom', '')}:"
-                                f"{v.get('pos', '')} {v.get('ref', '')}>"
-                                f"{v.get('alt', '')} "
-                                f"[{v.get('impact', '')}/{v.get('effect', '')}] "
-                                f"tier {v.get('tier', '')}"
-                                + (f" ACMG-style: {v['acmg_classification']}"
-                                   if v.get('acmg_classification') else "")),
-            }
-        })
-
-    entries.insert(0, {
-        "resource": {
-            "resourceType": "DiagnosticReport",
-            "id": "genetics-report",
+        obs_url = _urn(sample, "Observation", str(i))
+        obs_refs.append({"reference": obs_url})
+        entries.append({"fullUrl": obs_url, "resource": {
+            "resourceType": "Observation",
+            "id": _id_from(obs_url),
+            "meta": {"profile": [f"{_GR_IG}/variant"]},
             "status": "final",
             "category": [{"coding": [{
-                "system": "http://terminology.hl7.org/CodeSystem/v2-0074",
-                "code": "GE", "display": "Genetics"}]}],
-            "code": {"coding": [{
-                "system": "http://loinc.org", "code": "51969-4",
-                "display": "Genetic analysis report"}]},
-            "subject": {"display": sample},
-            "conclusion": build_narrative(summary) + " RESEARCH USE ONLY.",
-            "result": obs_refs,
-        }
-    })
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "laboratory", "display": "Laboratory"}]}],
+            "code": _cc(_LOINC, "69548-6", "Genetic variant assessment"),
+            "subject": {"reference": patient_url},
+            "specimen": {"reference": specimen_url},
+            "valueCodeableConcept": _cc(_LOINC, "LA9633-4", "Present"),
+            "component": _variant_components(v, assembly, source_class),
+        }})
+
+    entries.insert(2, {"fullUrl": report_url, "resource": {
+        "resourceType": "DiagnosticReport",
+        "id": _id_from(report_url),
+        "meta": {"profile": [f"{_GR_IG}/genomic-report"]},
+        "status": "final",
+        "category": [{"coding": [{
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0074",
+            "code": "GE", "display": "Genetics"}]}],
+        "code": _cc(_LOINC, "51969-4", "Genetic analysis master panel"),
+        "subject": {"reference": patient_url},
+        "specimen": [{"reference": specimen_url}],
+        "conclusion": build_narrative(summary) + " RESEARCH USE ONLY.",
+        "result": obs_refs,
+    }})
 
     return {"resourceType": "Bundle", "type": "collection", "entry": entries}
 
 
-def write_reports(summary: dict, narrative: str, prefix: Path) -> None:
+def _id_from(urn: str) -> str:
+    """The bare uuid (a valid FHIR id) from a urn:uuid: fullUrl."""
+    return urn.rsplit(":", 1)[-1]
+
+
+# --- FHIR: offline structural conformance check ----------------------------
+#
+# The authoritative check is the HL7 FHIR validator (Java, needs the IG package
+# + network); this is a fast, dependency-free structural gate that runs in CI
+# and catches the mistakes that break bundle consumers: dangling references,
+# missing mandatory elements, valueless components. It is NOT a substitute for
+# full profile validation on a FHIR host.
+
+_VARIANT_PROFILE = f"{_GR_IG}/variant"
+_REPORT_PROFILE = f"{_GR_IG}/genomic-report"
+
+
+def validate_fhir_bundle(bundle: dict) -> list[str]:
+    """Return a list of structural problems (empty list == structurally OK)."""
+    problems: list[str] = []
+
+    if bundle.get("resourceType") != "Bundle":
+        return ["resourceType is not 'Bundle'"]
+    if bundle.get("type") not in ("collection", "document", "transaction", "batch"):
+        problems.append(f"unexpected Bundle.type {bundle.get('type')!r}")
+
+    entries = bundle.get("entry", [])
+    if not isinstance(entries, list):
+        return problems + ["Bundle.entry is not a list"]
+
+    full_urls: set[str] = set()
+    for i, e in enumerate(entries):
+        res = e.get("resource", {})
+        if not e.get("fullUrl"):
+            problems.append(f"entry[{i}] missing fullUrl")
+        else:
+            full_urls.add(e["fullUrl"])
+        if not res.get("resourceType"):
+            problems.append(f"entry[{i}] resource missing resourceType")
+
+    def _refs(obj):
+        """Yield every internal (urn:uuid) reference string in a resource."""
+        if isinstance(obj, dict):
+            for k, val in obj.items():
+                if k == "reference" and isinstance(val, str):
+                    yield val
+                else:
+                    yield from _refs(val)
+        elif isinstance(obj, list):
+            for item in obj:
+                yield from _refs(item)
+
+    n_report = n_variant = 0
+    for i, e in enumerate(entries):
+        res = e.get("resource", {})
+        rtype = res.get("resourceType")
+
+        for ref in _refs(res):
+            if ref.startswith("urn:uuid:") and ref not in full_urls:
+                problems.append(f"entry[{i}] ({rtype}) dangling reference {ref}")
+
+        if rtype == "DiagnosticReport":
+            n_report += 1
+            for field in ("status", "code", "subject"):
+                if not res.get(field):
+                    problems.append(f"DiagnosticReport missing {field}")
+            if _REPORT_PROFILE not in res.get("meta", {}).get("profile", []):
+                problems.append("DiagnosticReport missing genomic-report profile")
+            for r in res.get("result", []):
+                if r.get("reference") not in full_urls:
+                    problems.append(f"DiagnosticReport.result {r.get('reference')} unresolved")
+
+        elif rtype == "Observation":
+            n_variant += 1
+            for field in ("status", "code"):
+                if not res.get(field):
+                    problems.append(f"Observation {res.get('id')} missing {field}")
+            has_value = any(k.startswith("value") for k in res) or "dataAbsentReason" in res
+            if not has_value:
+                problems.append(f"Observation {res.get('id')} has no value[x]")
+            if _VARIANT_PROFILE not in res.get("meta", {}).get("profile", []):
+                problems.append(f"Observation {res.get('id')} missing variant profile")
+            for j, comp in enumerate(res.get("component", [])):
+                if not comp.get("code"):
+                    problems.append(f"Observation {res.get('id')} component[{j}] missing code")
+                if not any(k.startswith("value") for k in comp):
+                    problems.append(f"Observation {res.get('id')} component[{j}] has no value[x]")
+
+    if n_report != 1:
+        problems.append(f"expected exactly 1 DiagnosticReport, found {n_report}")
+    if not any(e.get("resource", {}).get("resourceType") == "Patient" for e in entries):
+        problems.append("no Patient resource in bundle")
+
+    return problems
+
+
+def write_reports(summary: dict, narrative: str, prefix: Path,
+                  assembly: str = "GRCh38", source_class: str = "germline") -> None:
     prefix.parent.mkdir(parents=True, exist_ok=True)
     (prefix.parent / f"{prefix.name}.report.html").write_text(
         render_html(summary, narrative), encoding="utf-8")
@@ -261,8 +554,13 @@ def write_reports(summary: dict, narrative: str, prefix: Path) -> None:
     }
     (prefix.parent / f"{prefix.name}.report.json").write_text(
         json.dumps(report_json, indent=2), encoding="utf-8")
+    bundle = build_fhir(summary, assembly=assembly, source_class=source_class)
+    problems = validate_fhir_bundle(bundle)
+    if problems:  # never emit a structurally-broken bundle silently
+        for p in problems:
+            log.warning("FHIR: %s", p)
     (prefix.parent / f"{prefix.name}.fhir.json").write_text(
-        json.dumps(build_fhir(summary), indent=2), encoding="utf-8")
+        json.dumps(bundle, indent=2), encoding="utf-8")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -272,6 +570,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Output path prefix (e.g. results/report/sample1)")
     p.add_argument("--llm", action="store_true",
                    help="Request LLM narrative enrichment (falls back if unavailable)")
+    p.add_argument("--assembly", default="GRCh38",
+                   help="Reference assembly for the FHIR bundle (e.g. GRCh38, GRCh37)")
+    p.add_argument("--source-class", default="germline",
+                   choices=("germline", "somatic"),
+                   help="Genomic source class recorded in the FHIR variant observations")
     return p.parse_args(argv)
 
 
@@ -282,7 +585,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     summary = load_prioritized(args.prioritized)
     narrative = maybe_llm_narrative(summary, args.llm)
-    write_reports(summary, narrative, args.prefix)
+    write_reports(summary, narrative, args.prefix,
+                  assembly=args.assembly, source_class=args.source_class)
     log.info("wrote report for sample %s (%d variants)",
              summary.get("sample"), len(summary.get("variants", [])))
     return 0

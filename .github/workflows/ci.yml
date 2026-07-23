@@ -52,3 +52,5 @@ jobs:
           test -f results/report/sample1/sample1.fhir.json
           test -f results/multiqc/multiqc_report.html                  # aggregate
           echo "All stages (M1-M6) produced their expected outputs."
+      - name: Validate the FHIR bundle (H7, offline structural check)
+        run: python3 bin/validate_fhir.py results/report/sample1/sample1.fhir.json

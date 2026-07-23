@@ -1,6 +1,7 @@
 //
 // Prioritize annotated variants (M5) and generate the clinical report (M6):
-// HTML + JSON + minimal FHIR. Runs fully offline; the LLM narrative is optional.
+// HTML + JSON + an HL7 Genomics Reporting IG-aligned FHIR R4 bundle (H7).
+// Runs fully offline; the LLM narrative is optional.
 //
 
 include { PRIORITIZE_VARIANTS } from '../../modules/local/prioritize_variants'
