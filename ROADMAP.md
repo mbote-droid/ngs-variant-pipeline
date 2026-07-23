@@ -25,9 +25,14 @@ The modules above are *built and tested on synthetic data*. This separate track
 turns "works on my laptop" into "runs a real genome and cites real evidence".
 These are depth/robustness items, distinct from the breadth items (M7, M9) above.
 
-- [ ] **H1  Containers** - pin and verify a container (mulled/biocontainers) for
-      every process, including the multi-tool steps that are currently conda-only
-      (e.g. `bwa-mem2 | samtools`); test the `docker`/`singularity` profiles.
+- [x] **H1  Containers** - every process pins a `container` (biocontainers, plus a
+      mulled image for the multi-tool `bwa-mem2 | samtools` step) alongside its
+      `conda` env. `bin/check_containers.py` enforces the "every process is
+      containerized" invariant offline in CI (`tests/test_containers.py`);
+      `bin/verify_containers.sh` pull-verifies every tag on a Docker/Singularity
+      host. See `docs/CONTAINERS.md`. (Registry pull-verification must be run on a
+      container-capable host - CI here and the dev environment have no engine and
+      block the registries.)
 - [ ] **H2  Real reference + cache path** - wire and test real GRCh38 plus a
       downloaded VEP/SnpEff cache (the current offline SnpEff DB is synthetic-only);
       a `--download_cache`/igenomes-style reference handling.
