@@ -57,8 +57,12 @@ These are depth/robustness items, distinct from the breadth items (M7, M9) above
       the same parse->metrics pattern. See ACCURACY.md.
 - [ ] **H5  Multi-sample scale** - lane merging (cat_fastq), cohort joint
       genotyping, per-sample and per-cohort reporting.
-- [ ] **H6  Real AI interpretation** - wire an actual LLM (offline/served) into the
-      report's narrative hook, with strict JSON guardrails and graceful fallback.
+- [x] **H6  Real AI interpretation** - `--report_llm` wires a real LLM into the
+      report narrative (Anthropic SDK, claude-opus-4-8; `ANTHROPIC_BASE_URL` for a
+      self-hosted/served gateway) with strict JSON guardrails (structured output +
+      a gene-grounding anti-hallucination check) and graceful fallback to the
+      deterministic template. Off by default; de-identified digest only; unit-tested
+      offline with an injected fake client. See `docs/AI_REPORT.md`.
 - [ ] **H7  Full FHIR conformance** - align the Bundle with the HL7 Genomics
       Reporting IG.
 

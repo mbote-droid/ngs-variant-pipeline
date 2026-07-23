@@ -75,15 +75,34 @@ def build_narrative(summary: dict) -> str:
 def maybe_llm_narrative(summary: dict, enable_llm: bool) -> str:
     """Optional LLM enrichment hook. Falls back to the templated narrative.
 
-    No LLM backend is bundled; when --llm is requested but none is wired in, we
-    log and degrade rather than fabricating a narrative.
+    When --llm is set, try a real (guardrailed) LLM narrative via
+    bin/llm_narrative.py; if the backend is unavailable or its output fails
+    validation, degrade to the deterministic template rather than fabricating.
     """
     templated = build_narrative(summary)
     if not enable_llm:
         return templated
-    log.warning("LLM narrative requested but no backend configured; "
-                "using the deterministic templated narrative.")
+    narrative = _llm_narrative(summary)
+    if narrative:
+        return narrative
+    log.warning("LLM narrative unavailable; using the deterministic templated narrative.")
     return templated
+
+
+def _llm_narrative(summary: dict):
+    """Best-effort call into the optional LLM enrichment module (sibling in bin/)."""
+    try:
+        import os
+        import sys
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import llm_narrative  # noqa: E402  (sibling script, lazy import)
+    except Exception:
+        return None
+    try:
+        return llm_narrative.generate_narrative(summary)
+    except Exception as exc:                      # never let enrichment break the report
+        log.warning("LLM narrative errored (%s)", exc)
+        return None
 
 
 def _fmt_af(af) -> str:
