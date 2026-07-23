@@ -25,3 +25,6 @@ Thumbs.db
 *.fq.gz
 *.vcf.gz
 !assets/test_data/**
+
+# Generated delivery artifacts (patches produced for out-of-band handoff)
+*.patch
