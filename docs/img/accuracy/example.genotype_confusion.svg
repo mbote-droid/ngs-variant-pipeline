@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="380" viewBox="0 0 560 380" font-family='system-ui,-apple-system,"Segoe UI",sans-serif' role="img" aria-label="Genotype concordance (truth vs called)">
+<rect x="0.5" y="0.5" width="559" height="379" rx="10" fill="#fcfcfb" stroke="rgba(11,11,11,0.12)"/>
+<text x="64" y="26" font-size="15" font-weight="600" fill="#0b0b0b">Genotype concordance (truth vs called)</text>
+<text x="64" y="43" font-size="11.5" fill="#898781">HG-demo · concordance 0.947 over 19 matched</text>
+<rect x="104" y="58" width="71" height="71" rx="3" fill="#184f95" stroke="rgba(11,11,11,0.12)"/>
+<text x="140" y="98" font-size="16" font-weight="600" text-anchor="middle" fill="#ffffff">15</text>
+<rect x="178" y="58" width="71" height="71" rx="3" fill="#e8f1fc" stroke="rgba(11,11,11,0.12)"/>
+<text x="214" y="98" font-size="16" font-weight="600" text-anchor="middle" fill="#0b0b0b">0</text>
+<rect x="252" y="58" width="71" height="71" rx="3" fill="#e8f1fc" stroke="rgba(11,11,11,0.12)"/>
+<text x="288" y="98" font-size="16" font-weight="600" text-anchor="middle" fill="#0b0b0b">0</text>
+<text x="96" y="98" font-size="11" text-anchor="end" fill="#0b0b0b">het</text>
+<rect x="104" y="132" width="71" height="71" rx="3" fill="#dae6f5" stroke="rgba(11,11,11,0.12)"/>
+<text x="140" y="172" font-size="16" font-weight="600" text-anchor="middle" fill="#0b0b0b">1</text>
+<rect x="178" y="132" width="71" height="71" rx="3" fill="#bed1e7" stroke="rgba(11,11,11,0.12)"/>
+<text x="214" y="172" font-size="16" font-weight="600" text-anchor="middle" fill="#0b0b0b">3</text>
+<rect x="252" y="132" width="71" height="71" rx="3" fill="#e8f1fc" stroke="rgba(11,11,11,0.12)"/>
+<text x="288" y="172" font-size="16" font-weight="600" text-anchor="middle" fill="#0b0b0b">0</text>
+<text x="96" y="172" font-size="11" text-anchor="end" fill="#0b0b0b">hom_alt</text>
+<rect x="104" y="206" width="71" height="71" rx="3" fill="#e8f1fc" stroke="rgba(11,11,11,0.12)"/>
+<text x="140" y="246" font-size="16" font-weight="600" text-anchor="middle" fill="#0b0b0b">0</text>
+<rect x="178" y="206" width="71" height="71" rx="3" fill="#e8f1fc" stroke="rgba(11,11,11,0.12)"/>
+<text x="214" y="246" font-size="16" font-weight="600" text-anchor="middle" fill="#0b0b0b">0</text>
+<rect x="252" y="206" width="71" height="71" rx="3" fill="#e8f1fc" stroke="rgba(11,11,11,0.12)"/>
+<text x="288" y="246" font-size="16" font-weight="600" text-anchor="middle" fill="#0b0b0b">0</text>
+<text x="96" y="246" font-size="11" text-anchor="end" fill="#0b0b0b">hom_ref</text>
+<text x="140" y="294" font-size="11" text-anchor="middle" fill="#0b0b0b">het</text>
+<text x="214" y="294" font-size="11" text-anchor="middle" fill="#0b0b0b">hom_alt</text>
+<text x="288" y="294" font-size="11" text-anchor="middle" fill="#0b0b0b">hom_ref</text>
+<text x="215" y="314" font-size="12" text-anchor="middle" fill="#52514e">Called genotype</text>
+<text x="20" y="169" font-size="12" text-anchor="middle" fill="#52514e" transform="rotate(-90 20 169)">Truth genotype</text>
+</svg>

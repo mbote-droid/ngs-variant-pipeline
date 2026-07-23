@@ -33,6 +33,34 @@ nextflow run main.nf -profile docker --genome GRCh38 --input samplesheet.csv \
 Outputs land in `results/benchmark/<sample>/<sample>.benchmark.{json,tsv}` and the
 TSV is picked up by MultiQC.
 
+## Visualizations
+
+`bin/plot_accuracy.py` renders three self-contained **SVG** charts from the
+benchmark JSON (no matplotlib/JS — stdlib only, colourblind-safe palette). They
+are produced automatically by the `PLOT_ACCURACY` step whenever `--benchmark`
+runs, and land next to the metrics in `results/benchmark/<sample>/`:
+
+| Chart | What it shows |
+|---|---|
+| **Precision–Recall** | precision vs recall as the QUAL threshold sweeps (the classic ML PR curve); the best-F1 operating point is ringed |
+| **F1 by variant type** | precision / recall / F1 grouped for ALL / SNP / INDEL |
+| **Genotype concordance** | truth-vs-called genotype confusion heatmap (het / hom-alt / hom-ref) |
+
+You can also render them ad hoc from any benchmark JSON:
+
+```bash
+bin/plot_accuracy.py results/benchmark/HG002/HG002.benchmark.json \
+  --outdir plots --prefix HG002
+```
+
+The images below are **illustrative — generated on synthetic demo data**
+(P = R = F1 = 0.86, genotype concordance 0.95), not a real evaluation. Replace
+them with your own GIAB run for the real, publication-comparable numbers.
+
+![Precision–Recall curve](docs/img/accuracy/example.pr_curve.svg)
+![F1 by variant type](docs/img/accuracy/example.f1_by_type.svg)
+![Genotype concordance](docs/img/accuracy/example.genotype_confusion.svg)
+
 ## Gold standards (GIAB)
 
 The [Genome in a Bottle](https://www.nist.gov/programs-projects/genome-bottle)

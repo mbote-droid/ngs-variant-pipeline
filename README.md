@@ -44,8 +44,18 @@ nextflow run main.nf --input samplesheet.csv -profile conda
 Outputs land under `results/`: `qc/fastqc/`, `preprocessing/fastp/`,
 `multiqc/multiqc_report.html`, and provenance in `pipeline_info/`.
 
+## Accuracy
+Calls are scored against a truth set (precision / recall / F1, split by SNP/INDEL,
+plus genotype concordance) via `--benchmark` — a stdlib exact-match backend or
+GA4GH hap.py against GIAB. See **[ACCURACY.md](ACCURACY.md)** for the method and
+the GIAB workflow. Example charts (illustrative, on synthetic data):
+
+![Precision–Recall curve](docs/img/accuracy/example.pr_curve.svg)
+![Genotype concordance](docs/img/accuracy/example.genotype_confusion.svg)
+
 ## Tests
-The samplesheet validator has a standalone pytest suite (no pipeline needed):
+The Python components (samplesheet validator, prioritization + ACMG, benchmarking,
+plotting) have standalone pytest suites (no pipeline needed):
 ```bash
 pytest -q
 ```

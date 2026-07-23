@@ -75,13 +75,32 @@ def in_regions(regions: dict[str, list[tuple[int, int]]], chrom: str, pos: int) 
     return False
 
 
-def load_variants(path: Path, regions=None, pass_only=True) -> set[tuple]:
-    """Return the set of variant keys (chrom, pos, ref, alt) in a VCF.
+def _genotype(fmt: str, sample: str) -> str:
+    """Normalise a GT to het / hom_alt / hom_ref (or '' when unavailable)."""
+    if not fmt or not sample:
+        return ""
+    keys = fmt.split(":")
+    if "GT" not in keys:
+        return ""
+    gt = sample.split(":")[keys.index("GT")]
+    alleles = gt.replace("|", "/").split("/")
+    if alleles in (["0", "1"], ["1", "0"]):
+        return "het"
+    if alleles == ["1", "1"]:
+        return "hom_alt"
+    if alleles == ["0", "0"]:
+        return "hom_ref"
+    return gt
 
-    Multi-allelic records are split into one key per ALT allele. Optionally
-    filtered to PASS and to confident regions.
+
+def load_records(path: Path, regions=None) -> dict[tuple, dict]:
+    """Return {variant_key: {qual, gt, filter}} for every ALT allele in a VCF.
+
+    Multi-allelic records split into one key per ALT allele (sharing the record's
+    QUAL/GT/FILTER). Confident-region filtering is applied here; PASS filtering is
+    NOT (callers thresholding is applied later, so the PR sweep sees every call).
     """
-    keys: set[tuple] = set()
+    recs: dict[tuple, dict] = {}
     with _open(path) as handle:
         for line in handle:
             if line.startswith("#") or not line.strip():
@@ -89,18 +108,31 @@ def load_variants(path: Path, regions=None, pass_only=True) -> set[tuple]:
             cols = line.rstrip("\n").split("\t")
             if len(cols) < 5:
                 continue
-            chrom, pos, _vid, ref, alt = cols[0], int(cols[1]), cols[2], cols[3], cols[4]
+            chrom, pos, ref, alt = _norm_chrom(cols[0]), int(cols[1]), cols[3], cols[4]
+            qual = cols[5] if len(cols) > 5 else "."
             filt = cols[6] if len(cols) > 6 else "."
-            if pass_only and filt not in ("PASS", "."):
+            fmt = cols[8] if len(cols) > 8 else ""
+            sample = cols[9] if len(cols) > 9 else ""
+            if not in_regions(regions or {}, chrom, pos):
                 continue
-            nchrom = _norm_chrom(chrom)
-            if not in_regions(regions or {}, nchrom, pos):
-                continue
+            q = None if qual in (".", "") else float(qual)
+            gt = _genotype(fmt, sample)
             for a in alt.split(","):
                 if a in (".", ""):
                     continue
-                keys.add((nchrom, pos, ref.upper(), a.upper()))
-    return keys
+                recs[(chrom, pos, ref.upper(), a.upper())] = {
+                    "qual": q, "gt": gt, "filter": filt}
+    return recs
+
+
+def load_variants(path: Path, regions=None, pass_only=True) -> set[tuple]:
+    """Return the set of variant keys (chrom, pos, ref, alt) in a VCF.
+
+    Multi-allelic records are split into one key per ALT allele. Optionally
+    filtered to PASS and to confident regions.
+    """
+    return {k for k, r in load_records(path, regions).items()
+            if not pass_only or r["filter"] in ("PASS", ".")}
 
 
 def _metrics(tp: int, fp: int, fn: int) -> dict:
@@ -132,6 +164,53 @@ def compare(truth: set[tuple], query: set[tuple]) -> dict:
     return out
 
 
+GT_LABELS = ("het", "hom_alt", "hom_ref")
+
+
+def pr_curve(truth: set[tuple], query_recs: dict[tuple, dict]) -> list[dict]:
+    """Precision/recall as the QUAL threshold sweeps (the classic ML PR curve).
+
+    At each candidate threshold, query variants with QUAL >= t are "called";
+    TP/FP/FN are recomputed against the truth set. Variants with no QUAL are
+    treated as QUAL 0 (always called).
+    """
+    quals = sorted({r["qual"] for r in query_recs.values() if r["qual"] is not None})
+    thresholds = [0.0] + quals
+    points: list[dict] = []
+    for t in thresholds:
+        called = {k for k, r in query_recs.items()
+                  if (r["qual"] if r["qual"] is not None else 0.0) >= t}
+        tp, fp, fn = len(called & truth), len(called - truth), len(truth - called)
+        precision = tp / (tp + fp) if (tp + fp) else 1.0
+        recall = tp / (tp + fn) if (tp + fn) else 0.0
+        points.append({"threshold": round(t, 4),
+                       "precision": round(precision, 6),
+                       "recall": round(recall, 6),
+                       "tp": tp, "fp": fp, "fn": fn})
+    return points
+
+
+def genotype_confusion(truth_recs: dict[tuple, dict],
+                       query_recs: dict[tuple, dict]) -> dict:
+    """Confusion matrix of truth vs query genotype over matched (TP) variants."""
+    matrix = {t: {q: 0 for q in GT_LABELS} for t in GT_LABELS}
+    matched = concordant = 0
+    for key, tr in truth_recs.items():
+        qr = query_recs.get(key)
+        if qr is None:
+            continue
+        tg, qg = tr.get("gt", ""), qr.get("gt", "")
+        if tg in GT_LABELS and qg in GT_LABELS:
+            matrix[tg][qg] += 1
+            matched += 1
+            if tg == qg:
+                concordant += 1
+    concordance = round(concordant / matched, 6) if matched else 0.0
+    return {"labels": list(GT_LABELS), "matrix": matrix,
+            "matched": matched, "concordant": concordant,
+            "concordance": concordance}
+
+
 def write_json(result: dict, out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(result, indent=2), encoding="utf-8")
@@ -151,8 +230,11 @@ def write_tsv(result: dict, out: Path) -> None:
 def run(truth_path: Path, query_path: Path, bed_path: Path | None,
         sample: str, pass_only: bool = True) -> dict:
     regions = load_bed(bed_path) if bed_path else {}
-    truth = load_variants(truth_path, regions, pass_only=False)  # truth is all-confident
-    query = load_variants(query_path, regions, pass_only=pass_only)
+    truth_recs = load_records(truth_path, regions)   # truth is all-confident
+    query_recs = load_records(query_path, regions)
+    truth = set(truth_recs)
+    query = {k for k, r in query_recs.items()
+             if not pass_only or r["filter"] in ("PASS", ".")}
     metrics = compare(truth, query)
     return {
         "sample": sample,
@@ -162,6 +244,8 @@ def run(truth_path: Path, query_path: Path, bed_path: Path | None,
         "truth_variants": len(truth),
         "query_variants": len(query),
         "metrics": metrics,
+        "pr_curve": pr_curve(truth, query_recs),
+        "genotype": genotype_confusion(truth_recs, query_recs),
         "tool": "builtin",
         "disclaimer": ("Lightweight exact-match concordance. For a rigorous "
                        "evaluation use hap.py/vcfeval (see ACCURACY.md)."),
