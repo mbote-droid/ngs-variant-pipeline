@@ -30,7 +30,13 @@ Reference genome: GRCh38. Germline caller: GATK HaplotypeCaller.
       short-read germline/somatic/joint paths are unchanged. `--long_read_platform`
       (ont/pacbio) and `--clair3_model` parameterize it; CI stub-runs the whole
       long-read DAG. See `docs/LONGREAD.md`.
-- [ ] **M10 Polish** - nf-core lint, provenance, README, demo data, portfolio writeup
+- [x] **M10 Polish** - nf-core-style `nextflow_schema.json` (all 42 params
+      documented) with an offline sync-checker (`bin/check_schema.py`, unit-tested
+      + in CI so schema drift fails the build); `CITATIONS.md` (every tool +
+      reference); MIT `LICENSE`; a reviewer-facing one-pager (`docs/PORTFOLIO.md`);
+      README badges + summary refresh; manifest bumped to 1.0.0. Provenance
+      (pinned containers + timeline/report/trace + collated versions) and demo
+      data (synthetic `-profile test`) were already in place.
 
 Tool provisioning: `conda` is primary on this dev host; the `docker` profile is
 retained for portability.

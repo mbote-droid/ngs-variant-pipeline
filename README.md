@@ -1,17 +1,23 @@
 # ngs-variant-pipeline
 
 [![CI](https://github.com/mbote-droid/ngs-variant-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/mbote-droid/ngs-variant-pipeline/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Nextflow](https://img.shields.io/badge/nextflow-%E2%89%A524.04.0-brightgreen.svg)](https://www.nextflow.io/)
 
 A reproducible, containerized clinical-genomics pipeline built with **Nextflow**:
 from raw sequencing reads to an evidence-cited, clinician-readable report. It runs
 identically on a laptop (small data) or on cloud/HPC (full data), and layers an AI
 interpretation stage on top of standard best-practice genomics tooling.
 
-> Status: **Complete germline pipeline (M1-M6):** reads -> QC -> align -> call ->
-> annotate -> prioritize -> report, with a single MultiQC over every stage. See
-> `ROADMAP.md` for the build plan, `ARCHITECTURE.md` for the design, and
-> [`docs/EXAMPLE_OUTPUT.md`](docs/EXAMPLE_OUTPUT.md) for a real-run snapshot.
-> Somatic mode, long-read, and the cloud profile are next. Research use only.
+> Status: **Germline + somatic + long-read, laptop-to-cloud.** reads -> QC ->
+> align -> call -> annotate -> prioritize -> report, with a single MultiQC over
+> every stage. Short-read germline/somatic (Mutect2)/cohort joint genotyping and
+> long-read (minimap2 + Clair3 + Sniffles2) paths; HL7 FHIR output; GIAB accuracy
+> benchmarking. New here? Start with the one-page
+> [**project summary**](docs/PORTFOLIO.md). See `ROADMAP.md` for the build plan,
+> `ARCHITECTURE.md` for the design, [`docs/QUALITY.md`](docs/QUALITY.md) for the
+> testing/security strategy, and [`CITATIONS.md`](CITATIONS.md) for the tools.
+> Research use only.
 
 ## Requirements
 - Nextflow (>= 24.04), Java 17-21
@@ -77,10 +83,14 @@ the GIAB workflow. Example charts (illustrative, on synthetic data):
 
 ## Tests
 The Python components (samplesheet validator, prioritization + ACMG, benchmarking,
-plotting) have standalone pytest suites (no pipeline needed):
+plotting, FHIR bundle, schema) have standalone pytest suites (no pipeline needed);
+CI additionally runs the full DAG in stub mode plus offline verifiers for
+containers, the FHIR bundle, and the parameter schema:
 ```bash
 pytest -q
 ```
 
-## Roadmap (short)
-Germline short-read Illumina first, then somatic, then long-read. See `ROADMAP.md`.
+## Roadmap & license
+Build plan in `ROADMAP.md`: the hardening track (H1–H7), somatic (M7), cloud (M8),
+long-read (M9) and polish (M10) are complete. Tools cited in
+[`CITATIONS.md`](CITATIONS.md). Licensed under [MIT](LICENSE) — research use only.

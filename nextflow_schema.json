@@ -1,0 +1,296 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "$id": "https://raw.githubusercontent.com/mbote-droid/ngs-variant-pipeline/main/nextflow_schema.json",
+    "title": "ngs-variant-pipeline parameters",
+    "description": "Reproducible Nextflow NGS variant-analysis pipeline: reads to an evidence-cited clinical report.",
+    "type": "object",
+    "$defs": {
+        "input_output": {
+            "title": "Input / output",
+            "type": "object",
+            "required": ["input"],
+            "properties": {
+                "input": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Samplesheet CSV (sample,fastq_1,fastq_2[,status,patient]). See assets/samplesheet_test.csv."
+                },
+                "outdir": {
+                    "type": "string",
+                    "format": "directory-path",
+                    "default": "results",
+                    "description": "Output directory."
+                }
+            }
+        },
+        "reference": {
+            "title": "Reference / resources",
+            "type": "object",
+            "properties": {
+                "genome": {
+                    "type": "string",
+                    "description": "Known-genome key (see conf/genomes.config), e.g. 'GRCh38'. Fills reference assets."
+                },
+                "fasta": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Reference genome FASTA (overrides --genome)."
+                },
+                "known_sites": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Known-variants VCF for BQSR (optional)."
+                },
+                "gff": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Gene-model GFF3 for the offline SnpEff DB build."
+                },
+                "snpeff_db": {
+                    "type": "string",
+                    "default": "test_ref",
+                    "description": "SnpEff database name."
+                }
+            }
+        },
+        "annotation": {
+            "title": "Annotation",
+            "type": "object",
+            "properties": {
+                "annotator": {
+                    "type": "string",
+                    "default": "snpeff",
+                    "enum": ["snpeff", "vep"],
+                    "description": "Functional annotator: 'snpeff' (offline DB build) or 'vep'."
+                },
+                "download_snpeff_cache": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Download a prebuilt SnpEff DB instead of building offline."
+                },
+                "vep_cache": {
+                    "type": "string",
+                    "format": "directory-path",
+                    "description": "Path to an Ensembl VEP cache directory."
+                },
+                "vep_genome": {
+                    "type": "string",
+                    "description": "VEP assembly, e.g. 'GRCh38'."
+                },
+                "vep_species": {
+                    "type": "string",
+                    "default": "homo_sapiens",
+                    "description": "VEP species."
+                },
+                "vep_cache_version": {
+                    "type": "string",
+                    "description": "VEP cache version, e.g. '111'."
+                },
+                "download_vep_cache": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Download the VEP cache instead of using a local one."
+                }
+            }
+        },
+        "evidence": {
+            "title": "Clinical + population evidence (H3)",
+            "type": "object",
+            "properties": {
+                "clinvar": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "ClinVar sites VCF (adds CLNSIG etc.)."
+                },
+                "gnomad": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "gnomAD sites VCF (adds population AF)."
+                },
+                "dbsnp": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "dbSNP VCF (adds rsIDs)."
+                }
+            }
+        },
+        "somatic": {
+            "title": "Somatic mode (M7)",
+            "type": "object",
+            "properties": {
+                "somatic": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Run Mutect2 tumor/normal instead of germline."
+                },
+                "pon": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Panel-of-normals VCF (bgzipped+tabixed), optional."
+                },
+                "germline_resource": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Germline-resource VCF for Mutect2, optional."
+                }
+            }
+        },
+        "joint": {
+            "title": "Cohort joint genotyping (H5)",
+            "type": "object",
+            "properties": {
+                "joint": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Run cohort joint genotyping (germline)."
+                },
+                "cohort_id": {
+                    "type": "string",
+                    "default": "cohort",
+                    "description": "Name used for the combined multi-sample callset."
+                }
+            }
+        },
+        "longread": {
+            "title": "Long-read mode (M9)",
+            "type": "object",
+            "properties": {
+                "long_read": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Run the long-read path (ONT / PacBio) instead of short-read."
+                },
+                "long_read_platform": {
+                    "type": "string",
+                    "default": "ont",
+                    "enum": ["ont", "pacbio"],
+                    "description": "Long-read platform: 'ont' (Nanopore) or 'pacbio' (HiFi)."
+                },
+                "clair3_model": {
+                    "type": "string",
+                    "format": "directory-path",
+                    "description": "Clair3 model directory (required for real long-read runs)."
+                }
+            }
+        },
+        "benchmarking": {
+            "title": "Accuracy benchmarking (H4)",
+            "type": "object",
+            "properties": {
+                "benchmark": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Compare calls to a truth set."
+                },
+                "truth": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Truth/gold-standard VCF (e.g. GIAB)."
+                },
+                "truth_bed": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "High-confidence regions BED (optional)."
+                },
+                "benchmark_tool": {
+                    "type": "string",
+                    "default": "builtin",
+                    "enum": ["builtin", "happy"],
+                    "description": "Benchmark backend: 'builtin' (stdlib concordance) or 'happy'."
+                }
+            }
+        },
+        "stage_toggles": {
+            "title": "Stage toggles + report",
+            "type": "object",
+            "properties": {
+                "skip_bqsr": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Skip GATK BQSR (e.g. when no known sites)."
+                },
+                "skip_annotation": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Skip the annotation stage."
+                },
+                "skip_report": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Skip the report stage."
+                },
+                "report_llm": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enrich the report with an LLM narrative (off by default)."
+                }
+            }
+        },
+        "resources": {
+            "title": "Resource ceilings",
+            "type": "object",
+            "properties": {
+                "max_cpus": {
+                    "type": "integer",
+                    "default": 2,
+                    "description": "Maximum CPUs per process."
+                },
+                "max_memory": {
+                    "type": "string",
+                    "default": "6.GB",
+                    "description": "Maximum memory per process."
+                },
+                "max_time": {
+                    "type": "string",
+                    "default": "24.h",
+                    "description": "Maximum time per process."
+                }
+            }
+        },
+        "cloud": {
+            "title": "Cloud / HPC executor settings (M8)",
+            "type": "object",
+            "properties": {
+                "awsqueue": {
+                    "type": "string",
+                    "description": "AWS Batch job queue name (aws profile)."
+                },
+                "awsregion": {
+                    "type": "string",
+                    "default": "us-east-1",
+                    "description": "AWS region."
+                },
+                "google_project": {
+                    "type": "string",
+                    "description": "GCP project id (google profile)."
+                },
+                "google_location": {
+                    "type": "string",
+                    "default": "us-central1",
+                    "description": "GCP Batch location."
+                },
+                "azure_batch_account": {
+                    "type": "string",
+                    "description": "Azure Batch account (azure profile)."
+                },
+                "azure_storage_account": {
+                    "type": "string",
+                    "description": "Azure storage account (azure profile)."
+                }
+            }
+        }
+    },
+    "allOf": [
+        {"$ref": "#/$defs/input_output"},
+        {"$ref": "#/$defs/reference"},
+        {"$ref": "#/$defs/annotation"},
+        {"$ref": "#/$defs/evidence"},
+        {"$ref": "#/$defs/somatic"},
+        {"$ref": "#/$defs/joint"},
+        {"$ref": "#/$defs/longread"},
+        {"$ref": "#/$defs/benchmarking"},
+        {"$ref": "#/$defs/stage_toggles"},
+        {"$ref": "#/$defs/resources"},
+        {"$ref": "#/$defs/cloud"}
+    ]
+}

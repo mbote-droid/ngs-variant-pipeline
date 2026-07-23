@@ -24,6 +24,10 @@ jobs:
         run: pip install pytest
       - name: Run tests
         run: pytest -q
+      - name: Parameter schema in sync with config (M10)
+        run: python3 bin/check_schema.py
+      - name: Container declarations present (H1)
+        run: python3 bin/check_containers.py
 
   nextflow-stub:
     name: Pipeline stub run (all stages, offline)
