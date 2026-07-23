@@ -62,3 +62,14 @@ jobs:
             nextflow config main.nf -profile "$p" > /dev/null
           done
           echo "All cloud/HPC profiles resolve."
+      - name: Long-read path stub run (M9, minimap2 + Clair3 + Sniffles2)
+        run: |
+          set -e
+          nextflow run main.nf -profile test -stub -ansi-log false \
+            --long_read --input assets/samplesheet_test_longread.csv \
+            --outdir results_lr
+          test -f results_lr/alignment/longsample1/longsample1.sorted.bam   # minimap2
+          test -f results_lr/variants/longsample1/longsample1.clair3.vcf.gz  # Clair3 small variants
+          test -f results_lr/variants/longsample1/sv/longsample1.sniffles.vcf # Sniffles2 SVs
+          test -f results_lr/report/longsample1/longsample1.fhir.json         # report path
+          echo "Long-read path wired end-to-end."

@@ -23,7 +23,13 @@ Reference genome: GRCh38. Germline caller: GATK HaplotypeCaller.
       `test`/CI path are untouched). Cloud settings are parameterized
       (`--awsqueue`, `--google_project`, ...); CI parses every profile with
       `nextflow config` (no credentials needed). See `docs/CLOUD.md`.
-- [ ] **M9  Long-read add-on** - minimap2, Clair3, Sniffles2 structural variants
+- [x] **M9  Long-read add-on** - opt-in `--long_read` path: minimap2
+      (`map-ont`/`map-hifi`) alignment, Clair3 small-variant calling (into the
+      shared annotation+report path), and Sniffles2 structural variants (separate
+      SV VCF). Skips fastp/MarkDuplicates/BQSR (Illumina-specific); the
+      short-read germline/somatic/joint paths are unchanged. `--long_read_platform`
+      (ont/pacbio) and `--clair3_model` parameterize it; CI stub-runs the whole
+      long-read DAG. See `docs/LONGREAD.md`.
 - [ ] **M10 Polish** - nf-core lint, provenance, README, demo data, portfolio writeup
 
 Tool provisioning: `conda` is primary on this dev host; the `docker` profile is

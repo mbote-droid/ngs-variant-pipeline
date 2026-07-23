@@ -46,6 +46,10 @@ Ubuntu/WSL, follow the copy-paste **[WSL runbook](docs/RUNBOOK_WSL.md)**.
 Outputs land under `results/`: `qc/fastqc/`, `preprocessing/fastp/`,
 `multiqc/multiqc_report.html`, and provenance in `pipeline_info/`.
 
+**Long reads:** `--long_read` swaps in a Nanopore/PacBio path — minimap2 +
+Clair3 (small variants) + Sniffles2 (structural variants) — reusing the same
+annotation and report layer. See **[LONGREAD.md](docs/LONGREAD.md)**.
+
 **Any scale, no code changes:** the same workflow runs on a laptop, an HPC
 cluster (`-profile slurm,singularity`), or the cloud (`-profile aws` / `google`
 / `azure`) — only the executor profile changes. See **[CLOUD.md](docs/CLOUD.md)**.

@@ -17,7 +17,9 @@ include { INPUT_CHECK    } from './subworkflows/local/input_check'
 include { FASTQ_QC       } from './subworkflows/local/fastq_qc'
 include { PREPARE_GENOME } from './subworkflows/local/prepare_genome'
 include { ALIGN          } from './subworkflows/local/align'
+include { ALIGN_LONG     } from './subworkflows/local/align_long'
 include { CALL_VARIANTS  } from './subworkflows/local/call_variants'
+include { CALL_VARIANTS_LONG } from './subworkflows/local/call_variants_long'
 include { CALL_VARIANTS_SOMATIC } from './subworkflows/local/call_variants_somatic'
 include { JOINT_GENOTYPING } from './subworkflows/local/joint_genotyping'
 include { ANNOTATE       } from './subworkflows/local/annotate'
@@ -63,87 +65,125 @@ workflow {
     INPUT_CHECK ( file(params.input, checkIfExists: true) )
     ch_versions = ch_versions.mix( INPUT_CHECK.out.versions )
 
-    FASTQ_QC ( INPUT_CHECK.out.reads )
-    ch_versions      = ch_versions.mix( FASTQ_QC.out.versions )
-    ch_multiqc_files = ch_multiqc_files.mix( FASTQ_QC.out.multiqc_files )
+    // ---- M2/M3: long-read path (opt-in) OR the short-read path ----------
+    if ( params.long_read ) {
+        // ---- M9: long-read (minimap2 -> Clair3 + Sniffles2) -------------
+        // Long reads skip fastp/MarkDuplicates/BQSR (Illumina-specific) and go
+        // straight to minimap2. Clair3 calls small variants (into the report
+        // path); Sniffles2 calls structural variants (separate SV VCF).
+        def lr_preset   = params.long_read_platform == 'pacbio' ? 'map-hifi' : 'map-ont'
+        def lr_platform = params.long_read_platform == 'pacbio' ? 'hifi' : 'ont'
 
-    // ---- M2: alignment + BAM QC -----------------------------------------
-    run_bqsr = !params.skip_bqsr && (ref_known_sites as boolean)
-    ALIGN (
-        FASTQ_QC.out.trimmed_reads,
-        PREPARE_GENOME.out.fasta,
-        PREPARE_GENOME.out.fai,
-        PREPARE_GENOME.out.dict,
-        PREPARE_GENOME.out.bwa_index,
-        run_bqsr ? PREPARE_GENOME.out.known_sites : Channel.value([ [], [] ]),
-        run_bqsr
-    )
-    ch_versions      = ch_versions.mix( ALIGN.out.versions )
-    ch_multiqc_files = ch_multiqc_files
-        .mix( ALIGN.out.flagstat.map { meta, f -> f } )
-        .mix( ALIGN.out.markdup_metrics.map { meta, f -> f } )
-        .mix( ALIGN.out.mosdepth_global.map { meta, f -> f } )
-
-    // ---- M3 / M7: variant calling (germline, or somatic tumor/normal) ---
-    if ( params.somatic ) {
-        // Somatic: pair tumor/normal by patient and run Mutect2 (opt-in).
-        ch_pon      = params.pon ? Channel.fromPath(params.pon, checkIfExists: true).first() : Channel.value([])
-        ch_pon_tbi  = params.pon ? Channel.fromPath("${params.pon}.tbi", checkIfExists: true).first() : Channel.value([])
-        ch_germ     = params.germline_resource ? Channel.fromPath(params.germline_resource, checkIfExists: true).first() : Channel.value([])
-        ch_germ_tbi = params.germline_resource ? Channel.fromPath("${params.germline_resource}.tbi", checkIfExists: true).first() : Channel.value([])
-
-        CALL_VARIANTS_SOMATIC (
-            ALIGN.out.bam,
+        ALIGN_LONG (
+            INPUT_CHECK.out.reads,
             PREPARE_GENOME.out.fasta,
             PREPARE_GENOME.out.fai,
-            PREPARE_GENOME.out.dict,
-            ch_pon, ch_pon_tbi, ch_germ, ch_germ_tbi
+            lr_preset
         )
-        ch_versions  = ch_versions.mix( CALL_VARIANTS_SOMATIC.out.versions )
-        ch_calls_vcf = CALL_VARIANTS_SOMATIC.out.vcf
-    }
-    else if ( params.joint ) {
-        // ---- H5: cohort joint genotyping (opt-in) -----------------------
-        // Per-sample GVCFs -> CombineGVCFs -> one GenotypeGVCFs over the whole
-        // cohort. Emits a single multi-sample VCF; per-sample reports are then
-        // sliced out downstream by genotype column (see the report block).
-        JOINT_GENOTYPING (
-            ALIGN.out.bam,
+        ch_versions      = ch_versions.mix( ALIGN_LONG.out.versions )
+        ch_multiqc_files = ch_multiqc_files
+            .mix( ALIGN_LONG.out.flagstat.map { meta, f -> f } )
+            .mix( ALIGN_LONG.out.mosdepth_global.map { meta, f -> f } )
+
+        ch_clair3_model = params.clair3_model
+            ? Channel.fromPath(params.clair3_model, checkIfExists: true)
+            : Channel.value([])
+
+        CALL_VARIANTS_LONG (
+            ALIGN_LONG.out.bam,
             PREPARE_GENOME.out.fasta,
             PREPARE_GENOME.out.fai,
-            PREPARE_GENOME.out.dict,
-            params.cohort_id
+            lr_platform,
+            ch_clair3_model
         )
-        ch_versions      = ch_versions.mix( JOINT_GENOTYPING.out.versions )
-        ch_multiqc_files = ch_multiqc_files.mix( JOINT_GENOTYPING.out.stats.map { meta, f -> f } )
-        ch_calls_vcf     = JOINT_GENOTYPING.out.vcf
-        // Remember the per-sample identities for per-sample reporting.
-        ch_cohort_samples = ALIGN.out.bam.map { meta, bam, bai -> meta }
+        ch_versions      = ch_versions.mix( CALL_VARIANTS_LONG.out.versions )
+        ch_multiqc_files = ch_multiqc_files.mix( CALL_VARIANTS_LONG.out.stats.map { meta, f -> f } )
+        ch_calls_vcf     = CALL_VARIANTS_LONG.out.vcf
     }
     else {
-        CALL_VARIANTS (
-            ALIGN.out.bam,
+        // ---- M1: read QC/trim (short-read only) -------------------------
+        FASTQ_QC ( INPUT_CHECK.out.reads )
+        ch_versions      = ch_versions.mix( FASTQ_QC.out.versions )
+        ch_multiqc_files = ch_multiqc_files.mix( FASTQ_QC.out.multiqc_files )
+
+        // ---- M2: alignment + BAM QC -------------------------------------
+        run_bqsr = !params.skip_bqsr && (ref_known_sites as boolean)
+        ALIGN (
+            FASTQ_QC.out.trimmed_reads,
             PREPARE_GENOME.out.fasta,
             PREPARE_GENOME.out.fai,
-            PREPARE_GENOME.out.dict
+            PREPARE_GENOME.out.dict,
+            PREPARE_GENOME.out.bwa_index,
+            run_bqsr ? PREPARE_GENOME.out.known_sites : Channel.value([ [], [] ]),
+            run_bqsr
         )
-        ch_versions      = ch_versions.mix( CALL_VARIANTS.out.versions )
-        ch_multiqc_files = ch_multiqc_files.mix( CALL_VARIANTS.out.stats.map { meta, f -> f } )
-        ch_calls_vcf     = CALL_VARIANTS.out.vcf
+        ch_versions      = ch_versions.mix( ALIGN.out.versions )
+        ch_multiqc_files = ch_multiqc_files
+            .mix( ALIGN.out.flagstat.map { meta, f -> f } )
+            .mix( ALIGN.out.markdup_metrics.map { meta, f -> f } )
+            .mix( ALIGN.out.mosdepth_global.map { meta, f -> f } )
 
-        // ---- H4: accuracy benchmarking (opt-in, germline) ---------------
-        if ( params.benchmark ) {
-            if ( !params.truth ) {
-                error "Benchmarking (--benchmark) requires --truth <truth.vcf> " +
-                      "(and optionally --truth_bed <regions.bed>)."
-            }
-            BENCHMARK (
-                ch_calls_vcf,
+        // ---- M3 / M7 / H5: variant calling (germline / somatic / joint) -
+        if ( params.somatic ) {
+            // Somatic: pair tumor/normal by patient and run Mutect2 (opt-in).
+            ch_pon      = params.pon ? Channel.fromPath(params.pon, checkIfExists: true).first() : Channel.value([])
+            ch_pon_tbi  = params.pon ? Channel.fromPath("${params.pon}.tbi", checkIfExists: true).first() : Channel.value([])
+            ch_germ     = params.germline_resource ? Channel.fromPath(params.germline_resource, checkIfExists: true).first() : Channel.value([])
+            ch_germ_tbi = params.germline_resource ? Channel.fromPath("${params.germline_resource}.tbi", checkIfExists: true).first() : Channel.value([])
+
+            CALL_VARIANTS_SOMATIC (
+                ALIGN.out.bam,
                 PREPARE_GENOME.out.fasta,
-                PREPARE_GENOME.out.fai
+                PREPARE_GENOME.out.fai,
+                PREPARE_GENOME.out.dict,
+                ch_pon, ch_pon_tbi, ch_germ, ch_germ_tbi
             )
-            ch_versions      = ch_versions.mix( BENCHMARK.out.versions )
-            ch_multiqc_files = ch_multiqc_files.mix( BENCHMARK.out.tsv.map { meta, f -> f } )
+            ch_versions  = ch_versions.mix( CALL_VARIANTS_SOMATIC.out.versions )
+            ch_calls_vcf = CALL_VARIANTS_SOMATIC.out.vcf
+        }
+        else if ( params.joint ) {
+            // ---- H5: cohort joint genotyping (opt-in) -------------------
+            // Per-sample GVCFs -> CombineGVCFs -> one GenotypeGVCFs over the
+            // whole cohort. Emits a single multi-sample VCF; per-sample reports
+            // are sliced out downstream by genotype column (see report block).
+            JOINT_GENOTYPING (
+                ALIGN.out.bam,
+                PREPARE_GENOME.out.fasta,
+                PREPARE_GENOME.out.fai,
+                PREPARE_GENOME.out.dict,
+                params.cohort_id
+            )
+            ch_versions      = ch_versions.mix( JOINT_GENOTYPING.out.versions )
+            ch_multiqc_files = ch_multiqc_files.mix( JOINT_GENOTYPING.out.stats.map { meta, f -> f } )
+            ch_calls_vcf     = JOINT_GENOTYPING.out.vcf
+            // Remember the per-sample identities for per-sample reporting.
+            ch_cohort_samples = ALIGN.out.bam.map { meta, bam, bai -> meta }
+        }
+        else {
+            CALL_VARIANTS (
+                ALIGN.out.bam,
+                PREPARE_GENOME.out.fasta,
+                PREPARE_GENOME.out.fai,
+                PREPARE_GENOME.out.dict
+            )
+            ch_versions      = ch_versions.mix( CALL_VARIANTS.out.versions )
+            ch_multiqc_files = ch_multiqc_files.mix( CALL_VARIANTS.out.stats.map { meta, f -> f } )
+            ch_calls_vcf     = CALL_VARIANTS.out.vcf
+
+            // ---- H4: accuracy benchmarking (opt-in, germline) -----------
+            if ( params.benchmark ) {
+                if ( !params.truth ) {
+                    error "Benchmarking (--benchmark) requires --truth <truth.vcf> " +
+                          "(and optionally --truth_bed <regions.bed>)."
+                }
+                BENCHMARK (
+                    ch_calls_vcf,
+                    PREPARE_GENOME.out.fasta,
+                    PREPARE_GENOME.out.fai
+                )
+                ch_versions      = ch_versions.mix( BENCHMARK.out.versions )
+                ch_multiqc_files = ch_multiqc_files.mix( BENCHMARK.out.tsv.map { meta, f -> f } )
+            }
         }
     }
 
