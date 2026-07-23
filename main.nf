@@ -19,6 +19,7 @@ include { PREPARE_GENOME } from './subworkflows/local/prepare_genome'
 include { ALIGN          } from './subworkflows/local/align'
 include { CALL_VARIANTS  } from './subworkflows/local/call_variants'
 include { CALL_VARIANTS_SOMATIC } from './subworkflows/local/call_variants_somatic'
+include { JOINT_GENOTYPING } from './subworkflows/local/joint_genotyping'
 include { ANNOTATE       } from './subworkflows/local/annotate'
 include { BENCHMARK      } from './subworkflows/local/benchmark'
 include { REPORT         } from './subworkflows/local/report'
@@ -101,6 +102,24 @@ workflow {
         ch_versions  = ch_versions.mix( CALL_VARIANTS_SOMATIC.out.versions )
         ch_calls_vcf = CALL_VARIANTS_SOMATIC.out.vcf
     }
+    else if ( params.joint ) {
+        // ---- H5: cohort joint genotyping (opt-in) -----------------------
+        // Per-sample GVCFs -> CombineGVCFs -> one GenotypeGVCFs over the whole
+        // cohort. Emits a single multi-sample VCF; per-sample reports are then
+        // sliced out downstream by genotype column (see the report block).
+        JOINT_GENOTYPING (
+            ALIGN.out.bam,
+            PREPARE_GENOME.out.fasta,
+            PREPARE_GENOME.out.fai,
+            PREPARE_GENOME.out.dict,
+            params.cohort_id
+        )
+        ch_versions      = ch_versions.mix( JOINT_GENOTYPING.out.versions )
+        ch_multiqc_files = ch_multiqc_files.mix( JOINT_GENOTYPING.out.stats.map { meta, f -> f } )
+        ch_calls_vcf     = JOINT_GENOTYPING.out.vcf
+        // Remember the per-sample identities for per-sample reporting.
+        ch_cohort_samples = ALIGN.out.bam.map { meta, bam, bai -> meta }
+    }
     else {
         CALL_VARIANTS (
             ALIGN.out.bam,
@@ -154,7 +173,21 @@ workflow {
 
     // ---- M5 + M6: prioritization + report -------------------------------
     if ( !params.skip_report ) {
-        REPORT ( ch_report_vcf, params.report_llm )
+        // Default: one report per callset entry. In joint mode the callset is a
+        // single multi-sample VCF, so fan it out into one report per sample
+        // (the prioritizer selects each sample's genotype column via --sample)
+        // plus one whole-cohort report.
+        if ( params.joint ) {
+            ch_per_sample_vcf = ch_cohort_samples
+                .combine( ch_report_vcf )                       // [ smeta, cmeta, vcf, tbi ]
+                .map { smeta, cmeta, vcf, tbi -> [ smeta, vcf, tbi ] }
+            ch_report_input = ch_per_sample_vcf.mix( ch_report_vcf )
+        }
+        else {
+            ch_report_input = ch_report_vcf
+        }
+
+        REPORT ( ch_report_input, params.report_llm )
         ch_versions = ch_versions.mix( REPORT.out.versions )
     }
 

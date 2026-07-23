@@ -154,3 +154,30 @@ def test_main_cli(tmp_path):
 def test_empty_vcf_no_variants(tmp_path):
     variants = pv.prioritize(pv.parse_vcf(_write_vcf(tmp_path, [])))
     assert variants == []
+
+
+# --- multi-sample (joint callset) genotype selection (H5) ------------------
+
+def _multisample_vcf(tmp_path):
+    text = (
+        "##fileformat=VCFv4.2\n"
+        '##INFO=<ID=ANN,Number=.,Type=String,Description="SnpEff">\n'
+        "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tsampleA\tsampleB\n"
+        "chr1\t100\t.\tA\tT\t50\tPASS\t" + _ann("stop_gained", "HIGH", "G") +
+        "\tGT\t0/1\t1/1\n"
+    )
+    p = tmp_path / "joint.vcf"
+    p.write_text(text)
+    return p
+
+
+def test_sample_column_selected_by_name(tmp_path):
+    p = _multisample_vcf(tmp_path)
+    assert pv.parse_vcf(p, sample="sampleA")[0]["genotype"] == "het"
+    assert pv.parse_vcf(p, sample="sampleB")[0]["genotype"] == "hom_alt"
+
+
+def test_sample_defaults_to_first_and_unknown_falls_back(tmp_path):
+    p = _multisample_vcf(tmp_path)
+    assert pv.parse_vcf(p)[0]["genotype"] == "het"                    # first sample
+    assert pv.parse_vcf(p, sample="nope")[0]["genotype"] == "het"     # fallback

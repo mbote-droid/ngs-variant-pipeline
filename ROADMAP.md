@@ -55,8 +55,13 @@ These are depth/robustness items, distinct from the breadth items (M7, M9) above
       unit-tested) and GA4GH **hap.py** for real gold standards (GIAB HG001/HG002 +
       confident BED); precision / recall / F1 per variant type. vcfeval slots in via
       the same parse->metrics pattern. See ACCURACY.md.
-- [ ] **H5  Multi-sample scale** - lane merging (cat_fastq), cohort joint
-      genotyping, per-sample and per-cohort reporting.
+- [x] **H5  Multi-sample scale** - lane merging (CAT_FASTQ concatenates a
+      sample's lanes; single-lane samples pass through unchanged) and cohort
+      joint genotyping (`--joint`: per-sample GVCFs -> CombineGVCFs ->
+      GenotypeGVCFs over the whole cohort -> one multi-sample VCF). The cohort
+      callset fans out to a report per sample (prioritizer is sample-aware,
+      selecting each genotype column via `--sample`) plus a whole-cohort report.
+      Both opt-in; the single-sample path is unchanged. See `docs/COHORT.md`.
 - [x] **H6  Real AI interpretation** - `--report_llm` wires a real LLM into the
       report narrative (Anthropic SDK, claude-opus-4-8; `ANTHROPIC_BASE_URL` for a
       self-hosted/served gateway) with strict JSON guardrails (structured output +
