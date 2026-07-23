@@ -41,6 +41,8 @@ On your own data:
 ```bash
 nextflow run main.nf --input samplesheet.csv -profile conda
 ```
+For a **real genome** end-to-end (GRCh38 + evidence + GIAB accuracy benchmark) on
+Ubuntu/WSL, follow the copy-paste **[WSL runbook](docs/RUNBOOK_WSL.md)**.
 Outputs land under `results/`: `qc/fastqc/`, `preprocessing/fastp/`,
 `multiqc/multiqc_report.html`, and provenance in `pipeline_info/`.
 
