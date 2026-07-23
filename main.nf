@@ -19,26 +19,39 @@ include { PREPARE_GENOME } from './subworkflows/local/prepare_genome'
 include { ALIGN          } from './subworkflows/local/align'
 include { CALL_VARIANTS  } from './subworkflows/local/call_variants'
 include { ANNOTATE       } from './subworkflows/local/annotate'
+include { BENCHMARK      } from './subworkflows/local/benchmark'
 include { REPORT         } from './subworkflows/local/report'
 include { MULTIQC        } from './modules/local/multiqc'
 
 workflow {
+    // ---- H2: resolve --genome into reference params (explicit params win) -
+    // A known-genome key (conf/genomes.config) fills reference assets so a real
+    // run needs only `--genome GRCh38`. Anything passed explicitly overrides the
+    // map, so the synthetic `test` profile (which sets --fasta) is unaffected.
+    def genome_attrs = ( params.genome && params.genomes instanceof Map
+                         && params.genomes.containsKey(params.genome) )
+        ? params.genomes[params.genome] : [:]
+    def ref_fasta       = params.fasta       ?: genome_attrs.fasta
+    def ref_known_sites = params.known_sites ?: genome_attrs.known_sites
+    def ref_snpeff_db   = params.snpeff_db   ?: genome_attrs.snpeff_db
+
     // ---- Parameter checks ------------------------------------------------
     if (!params.input) {
         error "No input samplesheet provided. Use --input <samplesheet.csv> " +
               "(see assets/samplesheet_test.csv for the expected format)."
     }
-    if (!params.fasta) {
-        error "No reference provided. Use --fasta <reference.fa>."
+    if (!ref_fasta) {
+        error "No reference provided. Use --fasta <reference.fa> or " +
+              "--genome <key> (see conf/genomes.config)."
     }
 
     ch_versions      = Channel.empty()
     ch_multiqc_files = Channel.empty()
 
     // ---- Reference indices (once) ---------------------------------------
-    ch_fasta       = Channel.fromPath(params.fasta, checkIfExists: true)
-    ch_known_sites = params.known_sites
-        ? Channel.fromPath(params.known_sites, checkIfExists: true)
+    ch_fasta       = Channel.fromPath(ref_fasta, checkIfExists: true)
+    ch_known_sites = ref_known_sites
+        ? Channel.fromPath(ref_known_sites, checkIfExists: true)
         : Channel.empty()
 
     PREPARE_GENOME ( ch_fasta, ch_known_sites )
@@ -53,7 +66,7 @@ workflow {
     ch_multiqc_files = ch_multiqc_files.mix( FASTQ_QC.out.multiqc_files )
 
     // ---- M2: alignment + BAM QC -----------------------------------------
-    run_bqsr = !params.skip_bqsr && params.known_sites as boolean
+    run_bqsr = !params.skip_bqsr && (ref_known_sites as boolean)
     ALIGN (
         FASTQ_QC.out.trimmed_reads,
         PREPARE_GENOME.out.fasta,
@@ -79,17 +92,39 @@ workflow {
     ch_versions      = ch_versions.mix( CALL_VARIANTS.out.versions )
     ch_multiqc_files = ch_multiqc_files.mix( CALL_VARIANTS.out.stats.map { meta, f -> f } )
 
+    // ---- H4: accuracy benchmarking (opt-in) -----------------------------
+    if ( params.benchmark ) {
+        if ( !params.truth ) {
+            error "Benchmarking (--benchmark) requires --truth <truth.vcf> " +
+                  "(and optionally --truth_bed <regions.bed>)."
+        }
+        BENCHMARK (
+            CALL_VARIANTS.out.vcf,
+            PREPARE_GENOME.out.fasta,
+            PREPARE_GENOME.out.fai
+        )
+        ch_versions      = ch_versions.mix( BENCHMARK.out.versions )
+        ch_multiqc_files = ch_multiqc_files.mix( BENCHMARK.out.tsv.map { meta, f -> f } )
+    }
+
     // ---- M4: annotation -------------------------------------------------
     ch_report_vcf = CALL_VARIANTS.out.vcf
     if ( !params.skip_annotation ) {
-        if ( !params.gff ) {
-            error "Annotation requires --gff <genes.gff3> (or run with --skip_annotation)."
+        // The offline SnpEff DB build needs a GFF3; a downloaded/prebuilt cache
+        // or the VEP path does not.
+        boolean snpeff_build = params.annotator == 'snpeff' &&
+            !params.download_snpeff_cache
+        if ( snpeff_build && !params.gff ) {
+            error "Offline SnpEff DB build requires --gff <genes.gff3>. Provide " +
+                  "--gff, or use --download_snpeff_cache / --annotator vep, or " +
+                  "run with --skip_annotation."
         }
         ANNOTATE (
             CALL_VARIANTS.out.vcf,
             PREPARE_GENOME.out.fasta,
-            Channel.fromPath(params.gff, checkIfExists: true),
-            params.snpeff_db
+            params.gff ? Channel.fromPath(params.gff, checkIfExists: true)
+                       : Channel.value([]),
+            ref_snpeff_db
         )
         ch_versions      = ch_versions.mix( ANNOTATE.out.versions )
         ch_multiqc_files = ch_multiqc_files.mix( ANNOTATE.out.report.map { meta, f -> f } )

@@ -3,8 +3,13 @@ process BWAMEM2_MEM {
     label 'process_high'
 
     conda 'bioconda::bwa-mem2=2.2.1 bioconda::samtools=1.19.2'
-    // Multi-tool step (bwa-mem2 | samtools): provisioned via conda. A pinned
-    // mulled container should be added in the polish module for cloud runs.
+    // Multi-tool step (bwa-mem2 | samtools) needs a single image carrying both
+    // tools: a pinned mulled biocontainer (bwa-mem2 2.2.1 + samtools). The image
+    // bundles samtools 1.16.1; only sort/index are used here, so it is output-
+    // equivalent to the conda pin (1.19.2). versions.yml reports the real runtime
+    // versions. A version-matched image can be regenerated with `wave` (see
+    // docs/CONTAINERS.md) on a Docker-capable host if exact parity is required.
+    container 'biocontainers/mulled-v2-e5d375990341c5aef3c9aff74f96f66f65375ef6:2cdf6bf1e92acbeb9b2834b1c58b6a682df32abb-0'
 
     input:
     tuple val(meta), path(reads)
