@@ -54,3 +54,11 @@ jobs:
           echo "All stages (M1-M6) produced their expected outputs."
       - name: Validate the FHIR bundle (H7, offline structural check)
         run: python3 bin/validate_fhir.py results/report/sample1/sample1.fhir.json
+      - name: Cloud/HPC profiles parse (M8, no credentials needed)
+        run: |
+          set -e
+          for p in slurm aws google azure; do
+            echo "== profile: $p =="
+            nextflow config main.nf -profile "$p" > /dev/null
+          done
+          echo "All cloud/HPC profiles resolve."

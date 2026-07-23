@@ -16,7 +16,13 @@ Reference genome: GRCh38. Germline caller: GATK HaplotypeCaller.
       panel-of-normals & germline-resource; opt-in `--somatic`, germline path
       unchanged. See `docs/SOMATIC.md`. (Contamination table + COSMIC/actionability
       remain follow-ups.)
-- [ ] **M8  Integration + cloud profile** - demonstrate "same pipeline, any scale"
+- [x] **M8  Integration + cloud profile** - "same pipeline, any scale": opt-in
+      `slurm` (HPC), `aws` (AWS Batch), `google` (Google Cloud Batch) and `azure`
+      (Azure Batch) executor profiles, each pulling `conf/cloud.config` for
+      WGS/WES-scale resources + retry-with-more-memory (the dev-host caps and the
+      `test`/CI path are untouched). Cloud settings are parameterized
+      (`--awsqueue`, `--google_project`, ...); CI parses every profile with
+      `nextflow config` (no credentials needed). See `docs/CLOUD.md`.
 - [ ] **M9  Long-read add-on** - minimap2, Clair3, Sniffles2 structural variants
 - [ ] **M10 Polish** - nf-core lint, provenance, README, demo data, portfolio writeup
 

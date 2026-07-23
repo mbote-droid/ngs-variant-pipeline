@@ -46,6 +46,11 @@ Ubuntu/WSL, follow the copy-paste **[WSL runbook](docs/RUNBOOK_WSL.md)**.
 Outputs land under `results/`: `qc/fastqc/`, `preprocessing/fastp/`,
 `multiqc/multiqc_report.html`, and provenance in `pipeline_info/`.
 
+**Any scale, no code changes:** the same workflow runs on a laptop, an HPC
+cluster (`-profile slurm,singularity`), or the cloud (`-profile aws` / `google`
+/ `azure`) — only the executor profile changes. See **[CLOUD.md](docs/CLOUD.md)**.
+For the design + testing/security strategy, see **[QUALITY.md](docs/QUALITY.md)**.
+
 **Multiple samples / lanes:** samples split across lanes are merged automatically;
 `--joint` runs GATK cohort joint genotyping (one multi-sample callset + a report
 per sample). See **[COHORT.md](docs/COHORT.md)**. Tumor/normal somatic calling is
