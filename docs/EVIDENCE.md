@@ -63,3 +63,41 @@ records the class in its `valueString`.
 
 The logic is stdlib-only and unit-tested in `tests/test_acmg.py`, so you can
 exercise and extend it without running the pipeline.
+
+## Evaluating the prioritizer as a classifier (ROC / PR-AUC)
+
+Because prioritization is fundamentally a **binary classification** problem, it
+can be evaluated exactly like an ML model: treat the ranking as a *score* and
+ClinVar significance as the *ground-truth label*, then measure **ROC-AUC** and
+**PR-AUC**. `bin/eval_prioritizer.py` does this from the prioritized JSON:
+
+```bash
+# prioritize with a ClinVar overlay first, then evaluate
+eval_prioritizer.py results/report/HG002/HG002.prioritized.json \
+  --score impact --sample HG002 --json eval.json --tsv eval.tsv
+plot_accuracy.py eval.json --outdir plots --prefix HG002   # -> ROC + PR-AUC SVGs
+```
+
+- **label** — ClinVar pathogenic/likely-path → 1, benign/likely-benign → 0;
+  VUS / conflicting / unlabelled variants are excluded.
+- **score** — `--score impact` (default) ranks by SnpEff/VEP IMPACT + gnomAD
+  rarity, which **does not use ClinVar**, so this is an *independent* test of how
+  well functional prediction recovers clinical pathogenicity. `--score tier` and
+  `--score acmg` are also available; `acmg` folds ClinVar into the score, so its
+  result is self-consistency (flagged `self_consistent: true` in the output), not
+  an independent test.
+
+AUC is computed tie-aware (Mann-Whitney U); PR-AUC is average precision. The
+`plot_accuracy.py` renderer detects the eval JSON and emits an ROC curve (with the
+chance diagonal) and a PR curve (with the prevalence no-skill baseline).
+
+Illustrative example (synthetic demo data, `--score impact`, ROC-AUC 0.84 /
+PR-AUC 0.87 — replace with a real ClinVar-annotated run):
+
+![ROC curve](docs/img/accuracy/example.roc.svg)
+![Precision–Recall (AUC)](docs/img/accuracy/example.pr_auc.svg)
+
+> Research-use only: ClinVar labels vary in review status, so AUC here is a
+> development signal, not a clinical validation.
+
+Logic is unit-tested in `tests/test_eval_prioritizer.py`.

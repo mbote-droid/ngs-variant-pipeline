@@ -16,10 +16,11 @@ process GENERATE_REPORT {
     path 'versions.yml',                     emit: versions
 
     script:  // generate_report.py is on PATH via bin/
-    def prefix  = task.ext.prefix ?: "${meta.id}"
+    def prefix   = task.ext.prefix ?: "${meta.id}"
+    def args     = task.ext.args ?: ''      // e.g. --assembly / --source-class (H7)
     def llm_flag = enable_llm ? '--llm' : ''
     """
-    generate_report.py ${prioritized_json} --prefix ${prefix} ${llm_flag}
+    generate_report.py ${prioritized_json} --prefix ${prefix} ${llm_flag} ${args}
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":

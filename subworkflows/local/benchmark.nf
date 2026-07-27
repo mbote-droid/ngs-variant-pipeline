@@ -9,6 +9,7 @@
 include { BENCHMARK_VCF } from '../../modules/local/benchmark_vcf'
 include { HAPPY         } from '../../modules/local/happy'
 include { HAPPY_PARSE   } from '../../modules/local/happy_parse'
+include { PLOT_ACCURACY } from '../../modules/local/plot_accuracy'
 
 workflow BENCHMARK {
     take:
@@ -40,8 +41,13 @@ workflow BENCHMARK {
         ch_versions = ch_versions.mix( BENCHMARK_VCF.out.versions.first() )
     }
 
+    // Showcase SVGs (PR curve, F1-by-type, genotype confusion) from the metrics.
+    PLOT_ACCURACY ( ch_json )
+    ch_versions = ch_versions.mix( PLOT_ACCURACY.out.versions.first() )
+
     emit:
-    metrics  = ch_json   // [ meta, benchmark.json ]
-    tsv      = ch_tsv     // [ meta, benchmark.tsv ]
+    metrics  = ch_json                // [ meta, benchmark.json ]
+    tsv      = ch_tsv                  // [ meta, benchmark.tsv ]
+    plots    = PLOT_ACCURACY.out.plots // [ meta, [ *.svg ] ]
     versions = ch_versions
 }

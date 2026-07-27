@@ -83,8 +83,11 @@ def check_module(path: Path) -> tuple[list[str], list[str]]:
         failures.append(f"{name}: malformed container image '{image}'")
         return failures, warnings
 
-    # Best-effort version cross-check (warning only). Skip mulled/hash tags.
-    if conda_m is not None and "mulled-" not in image:
+    # Best-effort version cross-check (warning only). Skip mulled/hash tags and
+    # base-OS images (ubuntu/debian/alpine carry no single tool version).
+    _BASE_IMAGES = {"ubuntu", "debian", "alpine"}
+    if (conda_m is not None and "mulled-" not in image
+            and img_m.group("tool") not in _BASE_IMAGES):
         ver = _tag_version(img_m.group("tag"))
         conda_val = conda_m.group("val")
         if ver is not None and ver not in conda_val:

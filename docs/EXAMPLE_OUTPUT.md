@@ -50,6 +50,8 @@ deterministic summary:
 > 3 variant(s) were reported. 1 were predicted HIGH impact. 1 were predicted
 > MODERATE impact. Genes with higher-impact variants: TESTG.
 
-`report.json` carries the structured payload; `fhir.json` is a minimal FHIR R4
-Bundle (one DiagnosticReport + one Observation per variant). All are labelled
-**research use only** and are not a clinical ACMG classification.
+`report.json` carries the structured payload; `fhir.json` is an HL7 Genomics
+Reporting IG-aligned FHIR R4 Bundle (de-identified Patient + Specimen +
+genomic-report DiagnosticReport + one LOINC-coded `variant` Observation per
+variant; see [FHIR.md](FHIR.md)). All are labelled **research use only** and are
+not a clinical ACMG classification.

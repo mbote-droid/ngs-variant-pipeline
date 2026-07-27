@@ -140,6 +140,28 @@ def test_mixed_endedness_same_sample_rejected(tmp_path):
         cs.validate_samplesheet(_write(tmp_path, sheet))
 
 
+def test_patient_defaults_to_sample(tmp_path):
+    p = _write(tmp_path, "sample,fastq_1\ns1,/d/s1_R1.fastq.gz\n")
+    rows = cs.validate_samplesheet(p)
+    assert rows[0]["patient"] == "s1"          # absent -> defaults to sample id
+
+
+def test_patient_column_pairs_tumor_normal(tmp_path):
+    p = _write(tmp_path,
+               "sample,fastq_1,status,patient\n"
+               "pt1_n,/d/n_R1.fastq.gz,0,pt1\n"
+               "pt1_t,/d/t_R1.fastq.gz,1,pt1\n")
+    rows = cs.validate_samplesheet(p)
+    assert [r["patient"] for r in rows] == ["pt1", "pt1"]
+    assert [r["status"] for r in rows] == ["0", "1"]
+
+
+def test_patient_whitespace_rejected(tmp_path):
+    p = _write(tmp_path, "sample,fastq_1,patient\ns1,/d/s1_R1.fastq.gz,pt 1\n")
+    with pytest.raises(cs.SamplesheetError, match="'patient' contains whitespace"):
+        cs.validate_samplesheet(p)
+
+
 def test_bad_status_value_rejected(tmp_path):
     sheet = "sample,fastq_1,status\ns1,/d/s1_R1.fastq.gz,2\n"
     with pytest.raises(cs.SamplesheetError, match="'status' must be 0 or 1"):
@@ -183,8 +205,8 @@ def test_write_normalized_round_trip(tmp_path):
     out = tmp_path / "norm.csv"
     cs.write_normalized(rows, out)
     lines = out.read_text(encoding="utf-8").splitlines()
-    assert lines[0] == "sample,single_end,fastq_1,fastq_2,status"
-    assert lines[1].startswith("s1,false,")
+    assert lines[0] == "sample,patient,single_end,fastq_1,fastq_2,status"
+    assert lines[1].startswith("s1,s1,false,")   # patient defaults to sample id
 
 
 def test_main_cli_success_and_failure(tmp_path):

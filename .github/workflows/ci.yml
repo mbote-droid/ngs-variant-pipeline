@@ -24,6 +24,10 @@ jobs:
         run: pip install pytest
       - name: Run tests
         run: pytest -q
+      - name: Parameter schema in sync with config (M10)
+        run: python3 bin/check_schema.py
+      - name: Container declarations present (H1)
+        run: python3 bin/check_containers.py
 
   nextflow-stub:
     name: Pipeline stub run (all stages, offline)
@@ -52,3 +56,24 @@ jobs:
           test -f results/report/sample1/sample1.fhir.json
           test -f results/multiqc/multiqc_report.html                  # aggregate
           echo "All stages (M1-M6) produced their expected outputs."
+      - name: Validate the FHIR bundle (H7, offline structural check)
+        run: python3 bin/validate_fhir.py results/report/sample1/sample1.fhir.json
+      - name: Cloud/HPC profiles parse (M8, no credentials needed)
+        run: |
+          set -e
+          for p in slurm aws google azure; do
+            echo "== profile: $p =="
+            nextflow config main.nf -profile "$p" > /dev/null
+          done
+          echo "All cloud/HPC profiles resolve."
+      - name: Long-read path stub run (M9, minimap2 + Clair3 + Sniffles2)
+        run: |
+          set -e
+          nextflow run main.nf -profile test -stub -ansi-log false \
+            --long_read --input assets/samplesheet_test_longread.csv \
+            --outdir results_lr
+          test -f results_lr/alignment/longsample1/longsample1.sorted.bam   # minimap2
+          test -f results_lr/variants/longsample1/longsample1.clair3.vcf.gz  # Clair3 small variants
+          test -f results_lr/variants/longsample1/sv/longsample1.sniffles.vcf # Sniffles2 SVs
+          test -f results_lr/report/longsample1/longsample1.fhir.json         # report path
+          echo "Long-read path wired end-to-end."

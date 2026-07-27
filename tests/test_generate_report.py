@@ -84,21 +84,28 @@ def test_html_empty_variants_placeholder():
 
 # --- FHIR ------------------------------------------------------------------
 
+def _rtypes(bundle):
+    return [e["resource"]["resourceType"] for e in bundle["entry"]]
+
+
 def test_fhir_bundle_structure():
     bundle = gr.build_fhir(_summary())
     assert bundle["resourceType"] == "Bundle"
-    types = [e["resource"]["resourceType"] for e in bundle["entry"]]
-    assert types[0] == "DiagnosticReport"
+    types = _rtypes(bundle)
+    assert types.count("DiagnosticReport") == 1
     assert types.count("Observation") == 2
-    report = bundle["entry"][0]["resource"]
+    assert "Patient" in types and "Specimen" in types
+    report = next(e["resource"] for e in bundle["entry"]
+                  if e["resource"]["resourceType"] == "DiagnosticReport")
     assert "RESEARCH USE ONLY" in report["conclusion"]
     assert len(report["result"]) == 2   # references match observation count
 
 
 def test_fhir_empty_variants():
     bundle = gr.build_fhir(_summary(variants=[]))
-    types = [e["resource"]["resourceType"] for e in bundle["entry"]]
-    assert types == ["DiagnosticReport"]
+    types = _rtypes(bundle)
+    assert "DiagnosticReport" in types
+    assert types.count("Observation") == 0
 
 
 # --- IO / CLI --------------------------------------------------------------

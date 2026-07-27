@@ -181,13 +181,25 @@ def _genotype(fmt: str, sample: str) -> str:
     return gt
 
 
-def parse_vcf(path: Path) -> list[dict]:
+def parse_vcf(path: Path, sample: str | None = None) -> list[dict]:
+    """Parse a VCF into variant dicts.
+
+    For a multi-sample (joint) VCF, `sample` selects which genotype column to
+    read (matched against the #CHROM header names); it defaults to the first
+    sample, and falls back to the first if the name isn't present. This lets a
+    per-sample report be produced from a cohort callset without splitting it.
+    """
     variants: list[dict] = []
     header: list[str] = []
+    gt_index = 9   # first sample column by default
     with _open(path) as handle:
         for line in handle:
             if line.startswith("#"):
                 header.append(line.rstrip("\n"))
+                if line.startswith("#CHROM"):
+                    names = line.rstrip("\n").split("\t")[9:]
+                    if sample and sample in names:
+                        gt_index = 9 + names.index(sample)
                 continue
             if not line.strip():
                 continue
@@ -196,7 +208,8 @@ def parse_vcf(path: Path) -> list[dict]:
                 continue
             chrom, pos, vid, ref, alt, qual, filt, info = cols[:8]
             fmt = cols[8] if len(cols) > 8 else ""
-            sample = cols[9] if len(cols) > 9 else ""
+            sample_col = (cols[gt_index] if len(cols) > gt_index
+                          else (cols[9] if len(cols) > 9 else ""))
             ann = parse_ann(info)
             if not ann:
                 ann = parse_csq(info, csq_format(header))
@@ -215,7 +228,7 @@ def parse_vcf(path: Path) -> list[dict]:
                 "gene": ann.get("gene_name", ""),
                 "hgvs_c": ann.get("hgvs_c", ""),
                 "hgvs_p": ann.get("hgvs_p", ""),
-                "genotype": _genotype(fmt, sample),
+                "genotype": _genotype(fmt, sample_col),
             }
             variant.update(evidence)
             variants.append(variant)
@@ -394,7 +407,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.vcf.is_file():
         log.error("VCF not found: %s", args.vcf)
         return 1
-    variants = prioritize(parse_vcf(args.vcf))
+    variants = prioritize(parse_vcf(args.vcf, sample=args.sample))
     write_tsv(variants, args.tsv)
     write_json(variants, args.json, args.sample)
     counts = {t: sum(1 for v in variants if v["tier"] == t) for t in (1, 2, 3, 4)}
