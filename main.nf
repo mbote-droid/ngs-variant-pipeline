@@ -14,6 +14,7 @@
 nextflow.enable.dsl = 2
 
 include { INPUT_CHECK    } from './subworkflows/local/input_check'
+include { VALIDATE_INPUTS } from './modules/local/validate_inputs'
 include { FASTQ_QC       } from './subworkflows/local/fastq_qc'
 include { PREPARE_GENOME } from './subworkflows/local/prepare_genome'
 include { ALIGN          } from './subworkflows/local/align'
@@ -65,6 +66,20 @@ workflow {
     INPUT_CHECK ( file(params.input, checkIfExists: true) )
     ch_versions = ch_versions.mix( INPUT_CHECK.out.versions )
 
+    // ---- H8: input-hardening gate (opt-in) ------------------------------
+    // Validate FASTQ integrity + size/decompression-bomb caps BEFORE any heavy
+    // tool touches the data. Downstream reads join on the validation report, so
+    // alignment only proceeds once a sample passes (a failure aborts the run).
+    ch_reads = INPUT_CHECK.out.reads
+    if ( params.validate_inputs ) {
+        VALIDATE_INPUTS ( ch_reads )
+        ch_versions      = ch_versions.mix( VALIDATE_INPUTS.out.versions.first() )
+        ch_multiqc_files = ch_multiqc_files.mix( VALIDATE_INPUTS.out.report.map { meta, f -> f } )
+        ch_reads = ch_reads
+            .join( VALIDATE_INPUTS.out.report )
+            .map { meta, reads, report -> [ meta, reads ] }
+    }
+
     // ---- M2/M3: long-read path (opt-in) OR the short-read path ----------
     if ( params.long_read ) {
         // ---- M9: long-read (minimap2 -> Clair3 + Sniffles2) -------------
@@ -75,7 +90,7 @@ workflow {
         def lr_platform = params.long_read_platform == 'pacbio' ? 'hifi' : 'ont'
 
         ALIGN_LONG (
-            INPUT_CHECK.out.reads,
+            ch_reads,
             PREPARE_GENOME.out.fasta,
             PREPARE_GENOME.out.fai,
             lr_preset
@@ -102,7 +117,7 @@ workflow {
     }
     else {
         // ---- M1: read QC/trim (short-read only) -------------------------
-        FASTQ_QC ( INPUT_CHECK.out.reads )
+        FASTQ_QC ( ch_reads )
         ch_versions      = ch_versions.mix( FASTQ_QC.out.versions )
         ch_multiqc_files = ch_multiqc_files.mix( FASTQ_QC.out.multiqc_files )
 

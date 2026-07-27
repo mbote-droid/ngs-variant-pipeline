@@ -77,3 +77,26 @@ jobs:
           test -f results_lr/variants/longsample1/sv/longsample1.sniffles.vcf # Sniffles2 SVs
           test -f results_lr/report/longsample1/longsample1.fhir.json         # report path
           echo "Long-read path wired end-to-end."
+      - name: Input-hardening gate stub run (H8)
+        run: |
+          set -e
+          nextflow run main.nf -profile test -stub -ansi-log false \
+            --validate_inputs --outdir results_vi
+          test -f results_vi/qc/input_validation/sample1/sample1.validation.txt
+          test -f results_vi/report/sample1/sample1.fhir.json   # gate lets valid input through
+          echo "Input-hardening gate wired end-to-end."
+
+  security:
+    name: Security scan (SAST + dependency audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install scanners
+        run: pip install bandit pip-audit
+      - name: Bandit SAST on bin/ (fail on medium+ severity)
+        run: bandit -r bin/ -ll
+      - name: pip-audit (advisory scan of the Python toolchain)
+        run: pip-audit || true   # advisory: report known CVEs without blocking the build
