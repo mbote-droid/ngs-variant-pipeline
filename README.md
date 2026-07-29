@@ -59,7 +59,12 @@ annotation and report layer. See **[LONGREAD.md](docs/LONGREAD.md)**.
 **Any scale, no code changes:** the same workflow runs on a laptop, an HPC
 cluster (`-profile slurm,singularity`), or the cloud (`-profile aws` / `google`
 / `azure`) — only the executor profile changes. See **[CLOUD.md](docs/CLOUD.md)**.
-For the design + testing/security strategy, see **[QUALITY.md](docs/QUALITY.md)**.
+
+**Hardened inputs:** `--validate_inputs` gates the run on FASTQ integrity and
+size/decompression-bomb caps before any heavy tool runs; the docker profile runs
+non-root with dropped capabilities, and CI scans with bandit + pip-audit. See
+**[SECURITY.md](SECURITY.md)**. For the design + testing/security strategy, see
+**[QUALITY.md](docs/QUALITY.md)**.
 
 **Multiple samples / lanes:** samples split across lanes are merged automatically;
 `--joint` runs GATK cohort joint genotyping (one multi-sample callset + a report

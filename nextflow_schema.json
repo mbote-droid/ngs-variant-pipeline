@@ -173,6 +173,27 @@
                 }
             }
         },
+        "input_hardening": {
+            "title": "Input hardening (H8)",
+            "type": "object",
+            "properties": {
+                "validate_inputs": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Run the pre-flight FASTQ validation gate (integrity + size/bomb caps)."
+                },
+                "max_fastq_gb": {
+                    "type": "integer",
+                    "default": 200,
+                    "description": "Maximum decompressed size per FASTQ, in GB."
+                },
+                "max_compression_ratio": {
+                    "type": "integer",
+                    "default": 1000,
+                    "description": "Maximum decompressed/compressed ratio (decompression-bomb guard)."
+                }
+            }
+        },
         "benchmarking": {
             "title": "Accuracy benchmarking (H4)",
             "type": "object",
@@ -288,6 +309,7 @@
         {"$ref": "#/$defs/somatic"},
         {"$ref": "#/$defs/joint"},
         {"$ref": "#/$defs/longread"},
+        {"$ref": "#/$defs/input_hardening"},
         {"$ref": "#/$defs/benchmarking"},
         {"$ref": "#/$defs/stage_toggles"},
         {"$ref": "#/$defs/resources"},

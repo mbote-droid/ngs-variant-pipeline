@@ -113,28 +113,33 @@ program with a known overflow. Our mitigations: our own parsers are memory-safe,
 and the vulnerable-by-nature tools are isolated in containers with pinned,
 patchable versions. So we are **meaningfully hardened, but not exhaustively**.
 
-### What is **not** yet done (the next security workstream)
+### Input hardening (H8) — done
 
-Tracked honestly so it isn't mistaken for complete:
+The defense-in-depth workstream is now implemented (see `SECURITY.md`):
 
-- **Input resource limits** — no max input-size / decompression-bomb guard; a
-  hostile giant or highly-compressible input could exhaust disk/RAM (a DoS, not
-  code execution).
-- **Deep malformed-file rejection** — beyond the samplesheet, we don't pre-flight
-  BAM/VCF integrity (e.g. `samtools quickcheck`, `bcftools view` validation,
-  index/EOF checks) before handing files to the heavy tools.
-- **Guaranteed non-root execution** — the `docker` profile already runs as the
-  calling UID; this should be enforced across every container profile.
-- **Dependency/CVE scanning** — no automated scan of container images or the
-  (single, optional) Python dependency for published CVEs.
-- **Input provenance / checksums** — no required checksum on reference or input
-  files.
+- **Input resource limits + decompression-bomb guard** — `--validate_inputs`
+  runs `bin/validate_inputs.py` as a pre-flight gate: it caps decompressed size
+  (`--max_fastq_gb`) and the decompressed/compressed ratio
+  (`--max_compression_ratio`), catching bombs by **bounded streaming** without
+  ever fully expanding the file.
+- **Malformed-file rejection** — the same gate rejects truncated/non-FASTQ
+  files, invalid gzip, and non-DNA sequence before any heavy tool runs; a
+  failure aborts the run (downstream stages join on its report).
+- **Non-root + reduced privileges** — the `docker` profile runs as the calling
+  UID with `--security-opt=no-new-privileges --cap-drop=ALL`.
+- **CI security scanning** — `bandit` (SAST over `bin/`, fails on medium+) and
+  `pip-audit` (advisory) run on every push.
 
-None of these change the *outputs* or accuracy; they are defense-in-depth for a
-future where the pipeline ingests untrusted third-party uploads. A good next
-hardening item ("H8: input hardening") would add `samtools quickcheck` +
-`bcftools` validation gates, input size caps, non-root enforcement, and a
-container-image CVE scan in CI.
+### Still open (nice-to-have, not blocking)
+
+- **Container image CVE scanning** (e.g. Trivy) — tags are pinned so it can be
+  added; image pulls make it heavier, so it's not yet in CI.
+- **Deep BAM/VCF integrity** (`samtools quickcheck`, `bcftools` validation) for
+  user-supplied variant files — the FASTQ gate covers the primary input.
+- **Cryptographic input provenance / checksums.**
+
+None of these change *outputs* or accuracy; they are further defense-in-depth for
+a future that ingests untrusted third-party uploads.
 
 ## When this productizes into a hosted clinical service
 

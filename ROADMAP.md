@@ -98,6 +98,14 @@ These are depth/robustness items, distinct from the breadth items (M7, M9) above
       resolution) run in CI; authoritative IG profile validation on a FHIR host
       is documented. Assembly + germline/somatic source class are set per run.
       See `docs/FHIR.md`.
+- [x] **H8  Input hardening** - opt-in pre-flight gate (`--validate_inputs`,
+      `bin/validate_inputs.py`) that rejects truncated/malformed FASTQ, invalid
+      gzip, non-DNA sequence, oversized inputs (`--max_fastq_gb`) and
+      decompression bombs (`--max_compression_ratio`, caught by bounded streaming)
+      before any heavy tool runs; a failure aborts the run. Plus non-root +
+      `no-new-privileges`/`cap-drop=ALL` on the docker profile, and CI security
+      scanning (`bandit` SAST + `pip-audit`). Unit-tested + stub-run in CI. See
+      `SECURITY.md`.
 
 Intentional scope (not defects): outputs are **research-use-only** and are not a
 clinical/ACMG diagnostic. That labelling stays until real clinical validation.
