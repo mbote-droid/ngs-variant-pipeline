@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+type: software
+title: "NGS Variant Pipeline: reproducible Nextflow pipeline from reads to clinical variant report"
+abstract: "Reproducible, containerised Nextflow pipeline from raw sequencing reads to an evidence-cited clinical variant report, covering germline, somatic and long-read variant calling with GIAB accuracy benchmarking and HL7 FHIR output."
+authors:
+  - family-names: "Mbote"
+    given-names: "Samuel"
+    orcid: "https://orcid.org/0009-0003-2319-8873"
+    affiliation: "Daktari Genomed Labs"
+repository-code: "https://github.com/mbote-droid/ngs-variant-pipeline"
+url: "https://github.com/mbote-droid/ngs-variant-pipeline"
+license: MIT
+version: "1.0.0"
+date-released: "2026-10-07"
+keywords:
+  - "Nextflow"
+  - "NGS"
+  - "variant calling"
+  - "bioinformatics"
+  - "clinical genomics"
+  - "GIAB"
+  - "reproducible workflows"
